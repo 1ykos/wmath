@@ -376,17 +376,16 @@ namespace wmath{
   //0 -> 0; -1 -> 1; 1 -> 2; -2 ->  3; 2 -> 4 ...
   //decoding:
   //0 -> 0;  1 ->-1; 2 -> 1;  3 -> -2; 4 -> 2 ...
-  const uint32_t zigzag_encode(const int32_t& n){
-    return (n << 1) ^ (n >> 31);
+  template<typename T>
+  typename std::make_unsigned<typename std::enable_if<std::is_integral<T>::value,T>::type>::type
+  constexpr zigzag_encode(const T n){
+    return (n<<1)^(n>>std::numeric_limits<T>::digits-1);
   }
-  const uint64_t zigzag_encode(const int64_t& n){
-    return (n << 1) ^ (n >> 63);
-  }
-  const int32_t zigzag_decode(const uint32_t& n){
-    return (n >> 1) ^ (-(n & 1));
-  }
-  const int64_t zigzag_decode(const uint64_t& n){
-    return (n >> 1) ^ (-(n & 1));
+
+  template<typename T>
+  typename std::make_signed<typename std::enable_if<std::is_unsigned<T>::value,T>::type>::type
+  constexpr zigzag_decode(const T n){
+    return (n>>1)^(-(n&1));
   }
 
   // TODO: Somehow is broken for negative integers
