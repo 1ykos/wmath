@@ -220,7 +220,7 @@ namespace wmath{
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr ror(const T n, const T c){
-    const uint32_t mask = (numeric_limits<uint32_t>::digits-1);
+    const uint32_t mask = (std::numeric_limits<uint32_t>::digits-1);
     c &= mask;
     return (n>>c)|(n<<((-c)&mask));
   }
@@ -228,7 +228,7 @@ namespace wmath{
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr rol(const T n, const T c){
-    const uint32_t mask = (numeric_limits<uint32_t>::digits-1);
+    const uint32_t mask = (std::numeric_limits<uint32_t>::digits-1);
     c &= mask;
     return (n<<c)|(n>>((-c)&mask ));
   }
