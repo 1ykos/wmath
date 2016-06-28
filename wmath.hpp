@@ -219,17 +219,17 @@ namespace wmath{
   
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr ror(const T n, const T c){
-    const uint32_t mask = (std::numeric_limits<uint32_t>::digits-1);
-    c &= mask;
-    return (n>>c)|(n<<((-c)&mask));
+  constexpr ror(const T n, const T i){
+    const T m = (std::numeric_limits<T>::digits-1);
+    const T c = i&m;
+    return (n>>c)|(n<<((-c)&m));
   }
 
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr rol(const T n, const T c){
-    const uint32_t mask = (std::numeric_limits<uint32_t>::digits-1);
-    c &= mask;
+  constexpr rol(const T n, const T i){
+    const T mask = (std::numeric_limits<T>::digits-1);
+    const T c = i&mask;
     return (n<<c)|(n>>((-c)&mask ));
   }
 
