@@ -219,6 +219,22 @@ namespace wmath{
   
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr ror(const T n, const T c){
+    const uint32_t mask = (numeric_limits<uint32_t>::digits-1);
+    c &= mask;
+    return (n>>c)|(n<<((-c)&mask));
+  }
+
+  template <typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr rol(const T n, const T c){
+    const uint32_t mask = (numeric_limits<uint32_t>::digits-1);
+    c &= mask;
+    return (n<<c)|(n>>((-c)&mask ));
+  }
+
+  template <typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr bitmask(const T& lower, const T& upper){ // exclusive upper limit
     return T(1)<<upper-T(1)<<lower;
   }
@@ -269,7 +285,7 @@ namespace wmath{
       n=log2(n);
       ++log2star;
     }
-    r>>= 1+log2star;
+    r>>=1+log2star;
     l+=1+log2star;
     r |= (~uint64_t(0))<<(64-log2star);
     return r;
@@ -297,7 +313,6 @@ namespace wmath{
     return n;
   }
 
-  
   const inline uint64_t universal_decode_uint64(uint64_t i,uint64_t& l){
     uint64_t log2star = 0;
     while (i&(uint64_t(1)<<63-log2star)) ++log2star; // could be done with count leading zeroes
