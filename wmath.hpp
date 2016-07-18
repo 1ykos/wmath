@@ -1,14 +1,18 @@
 #ifndef WMATH_H
 #define WMATH_H
 
-#include <array>
 #include <algorithm>
+#include <algorithm>
+#include <array>
 #include <cstdint>
+#include <functional>
 #include <functional>
 #include <iostream>
 #include <iterator>
-#include <limits>
 #include <iterator>
+#include <limits>
+#include <numeric>
+#include <vector>
 //#include <bitset>
 
 using std::array;
@@ -216,7 +220,6 @@ namespace wmath{
   }
   */
 
-  
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr ror(const T n, const T i){
@@ -228,9 +231,9 @@ namespace wmath{
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr rol(const T n, const T i){
-    const T mask = (std::numeric_limits<T>::digits-1);
-    const T c = i&mask;
-    return (n<<c)|(n>>((-c)&mask ));
+    const T m = (std::numeric_limits<T>::digits-1);
+    const T c = i&m;
+    return (n<<c)|(n>>((-c)&m));
   }
 
   template <typename T>
@@ -251,13 +254,22 @@ namespace wmath{
   constexpr bitmask_lower(const T& lower){
     return T(0)-T(1)<<lower;
   }
-  
+
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr log2(const T& x,const T& lower=0,const T& upper=digits<T>()){
     return (upper-lower==T(1))?lower:(x&(T(0)-T(1)<<((upper+lower)/2))?
            log2(x,(upper+lower)/2,upper):
            log2(x,lower,(upper+lower)/2));
+  }
+
+  //TODO SFINAE for platforms where __builtin_clzl is not supported...
+  uint32_t constexpr log2(const uint32_t& x){
+    return x==0?0:31-__builtin_clzl(x);
+  }
+
+  uint64_t constexpr log2(const uint64_t& x){
+    return x==0?0:63-__builtin_clzll(x);
   }
 
   // levensthein coding in the range [0,2^51]
@@ -290,18 +302,10 @@ namespace wmath{
     r |= (~uint64_t(0))<<(64-log2star);
     return r;
   }
-
-/*
-  const inline uint64_t elias_delta_encode_uint64(const uint64_t n,uint64_t& len,uint64_t& lol){
-    len = log2(n+1);
-    lol = log2(len+1);
-    return ((n+1)<<(64-2*lol-len))|(lol<<(64-lol));
-  }
-*/
   
   const inline uint64_t universal_decode_uint64(uint64_t i){
     uint64_t log2star = 0;
-    while (i&(uint64_t(1)<<63-log2star)) ++log2star; // could be done with count leading zeroes
+    while (i&(uint64_t(1)<<(63-log2star))) ++log2star; // could be done with count leading zeroes
     i<<=1+log2star;
     uint64_t n = log2star>0;
     while (log2star>1){
@@ -315,7 +319,7 @@ namespace wmath{
 
   const inline uint64_t universal_decode_uint64(uint64_t i,uint64_t& l){
     uint64_t log2star = 0;
-    while (i&(uint64_t(1)<<63-log2star)) ++log2star; // could be done with count leading zeroes
+    while (i&(uint64_t(1)<<(63-log2star))) ++log2star; // could be done with count leading zeroes
     i<<=1+log2star;
     l+=1+log2star;
     uint64_t n = log2star>0;
@@ -340,6 +344,66 @@ namespace wmath{
     return r;
   }
 
+/*
+  class bitstream{//please be little endian...
+    private:
+      deque<intmax_t> data;
+      size_t digits=0;
+      size_t foffs=0;
+      size_t boffs=0;
+    public:
+      void push_back(const bool b){ //msb
+      }
+      void push_back(const intmax_t b,const size_t n){
+      }
+      void push_front(const bool b){ //lsb
+      }
+      void push_front(const intmax_t b,const size_t n){
+      }
+      void align(){
+      }
+  }
+  
+  class bigint{
+    private:
+      int digits;
+      intmax_t * data;
+    public:
+      bigint(){
+        data=new intmax_t[1];
+        digits=0;
+      }
+      bigint& operator+=(const bigint o){
+
+      }
+      bigint& operator+=(const intmax_t o){
+
+      }
+      bigint& operator-=(const bigint o){
+
+      }
+      bigint& operator-=(const intmax_t o){
+
+      }
+      bigint& operator*=(const bigint o){
+
+      }
+      bigint& operator*=(const intmax_t o){
+
+      }
+      bigint& operator<<=(const size_t n){
+
+      }
+      bigint& operator>>=(const size_t n){
+
+      }
+      ~bigint(){
+        digits=0;
+        delete[] data;
+        data=0;
+      }
+  }
+*/
   /* todo, mantissa has one 1 too much...
   const inline uint16_t minifloat_encode(double v){
     const int l = v!=0?log2(abs(v)):0;
@@ -379,7 +443,7 @@ namespace wmath{
   template<typename T>
   typename std::make_unsigned<typename std::enable_if<std::is_integral<T>::value,T>::type>::type
   constexpr zigzag_encode(const T n){
-    return (n<<1)^(n>>std::numeric_limits<T>::digits-1);
+    return (n<<1)^(n>>(std::numeric_limits<T>::digits-1));
   }
 
   template<typename T>
@@ -714,21 +778,32 @@ namespace wmath{
   }
 
   template<typename T>
-  class mean_variance_calculator{
-    public:
-      T M2=0;
-      T sumw=0;
-    public:
-      size_t n=0;
-      T mean=0;
-      void push(const T& x, const T& w){
-        ++n;
-        mean_variance(x,w,sumw,mean,M2);
-      } 
-      T variance() const {
-        return wmath::variance(M2,sumw,n);
-      }
+  struct mean_variance_calculator{
+    T M2=0;
+    T sumw=0;
+    size_t n=0;
+    T mean=0;
+    void push(const T& x, const T& w){
+      ++n;
+      mean_variance(x,w,sumw,mean,M2);
+    } 
+    T variance() const {
+      return wmath::variance(M2,sumw,n);
+    }
   };
+
+  template <class InputIterator>
+  array<typename iterator_traits<InputIterator>::value_type,2>
+  inline const mean_variance(InputIterator begin,InputIterator end){
+    typedef typename iterator_traits<InputIterator>::value_type V;
+    array<V,2> mv;
+    V sumw;
+    for (InputIterator it=begin;it!=end;++it){
+      mean_variance((*it)[0],(*it)[1],sumw,mv[0],mv[1]);
+    }
+    mv[1]/=sumw;
+    return mv;
+  }
 
   /*
 TODO: numerically stable implementation
