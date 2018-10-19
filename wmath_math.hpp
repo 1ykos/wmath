@@ -1,5 +1,5 @@
-#ifndef WMATH_H
-#define WMATH_H
+#ifndef WMATH_MATH_H
+#define WMATH_MATH_H
 #include "wmath_forward.hpp"
 #include "wmath_bits.hpp"
 
@@ -202,14 +202,6 @@ namespace wmath{
   }
 
   template<typename T>
-  typename std::enable_if<std::is_integral<T>::value>::type
-  const inline normalize(fraction<T>& x){
-    const T g = gcd<T,2>(x);
-    x[0]/=g;
-    x[0]/=g;
-  }
-
-  template<typename T>
   typename std::enable_if<std::is_integral<T>::value,T>::type 
   const inline div_to_nearest(const T& n,const T& d) {
     return (n+(((n>0)^(d<0))?(d/2):(-d/2)))/d;
@@ -346,7 +338,7 @@ namespace wmath{
  */
   template<typename T>
   typename std::enable_if<std::is_integral<T>::value,T>::type
-  const floor_square_root(const T& n){
+  constexpr floor_square_root(const T& n){
     if (n==0) return 0;
     T l = log2(n)/T(2);
     T t0 = ((n>>l)+(T(1)<<l))/T(2);
@@ -791,8 +783,8 @@ namespace wmath{
   constexpr tuple<size_t,size_t> triangle_index_unpack(const size_t& n){
     const size_t j = (floor_square_root(8*n+1)+1)/2;
     const size_t i = n-(j*(j-1))/2;
-    retirn {i,j};
+    return {i,j};
   }
 }
 
-#endif // WMATH_H
+#endif // WMATH_MATH_H

@@ -4,4 +4,5 @@
 #include "wmath_primes.hpp"
 #include "wmath_bits.hpp"
 #include "wmath_math.hpp"
+#include "wmath_hash.hpp"
 #endif // WMATH_H

@@ -85,7 +85,7 @@ namespace wmath{
   template<class K,class enable = void>
   struct hash_functor{
     typedef typename false_type::type is_injective;
-    size_t operator()(const K& k){
+    size_t operator()(const K& k) const {
       return hash(k);
     }
   };

@@ -34,7 +34,7 @@ namespace wmath{
   tuple<uint64_t,uint64_t>
   constexpr long_mul(const uint64_t& a, const uint64_t& b){
     unsigned __int128 r = ((unsigned __int128)(a))*((unsigned __int128)(b));
-    return {uint64_t(r>>64),uint64_t(r)};
+    return {r>>64,r};
   }
 #endif
 
@@ -197,15 +197,12 @@ namespace wmath{
 #endif
 
   template<class T,size_t step=1,class U = typename std::make_unsigned<T>::type>
-  constexpr U reflect(T n) {
-    for (size_t i=step;i<digits<unsigned char>();i*=2){ 
-      n = ((n&(~(alternating_bitmask<T>(i))))>>i)|
-        ((n&( (alternating_bitmask<T>(i))))<<i);
-    }
-    return bswap(n);
-  }
-
+  constexpr U reflect(T n);
+  
+  template<>
   uint8_t inline reflect(const uint8_t n){
+    return (n * 0x0202020202ull & 0x010884422010ull) % 1023;
+    // this would be faster on a machine without 64 bit multiplication:
     switch (n){
       case 0b00000000: return 0b00000000;
       case 0b00000001: return 0b10000000;
@@ -482,6 +479,21 @@ namespace wmath{
       default: return 0;
     }
   }
+
+  template<class T,size_t step,class U>
+  constexpr U reflect(T n) {
+    // I thought this was faster but it is not...
+    //U m(0);
+    //for (size_t i=0;i!=digits<U>();i+=digits<unsigned char>())
+    //  m|=U(reflect(uint8_t(n>>i)))<<i;
+    //return bswap(m);*/
+    for (size_t i=step;i<digits<unsigned char>();i*=2){ 
+      n = ((n&(~(alternating_bitmask<T>(i))))>>i)|
+        ((n&( (alternating_bitmask<T>(i))))<<i);
+    }
+    return bswap(n);
+  }
+
   
   /* there are m! possible bijections for integers modulo m
    * for a 64 bit integer this is a lot...
@@ -546,33 +558,37 @@ namespace wmath{
 #if defined (__has_include) && (__has_include(<x86intrin.h>))
 
   uint16_t const clmul_mod(const uint16_t& i,const uint16_t& j){
-    const __m128i I{(const int64_t)(i) ,0ull};
-    const __m128i J{(const int64_t)(j) ,0ull};
-    const __m128i M{29189u,0ull};
-    const __m128i X = _mm_clmulepi64_si128(I,J,0);
-    const __m128i A = _mm_clmulepi64_si128(X,M,0);
-    const __m128i B = _mm_clmulepi64_si128(A,M,0);
-    return A[0]^A[1]^B[1]^X[0]^X[1]; // TODO
+    __m128i I{}; I[0]^=i;
+    __m128i J{}; J[0]^=j;
+    __m128i M{}; M[0]^=29189u;
+    __m128i X = _mm_clmulepi64_si128(I,J,0);
+    __m128i X0{};X0[0]^=X[0]&(~uint16_t(0));
+    __m128i A = _mm_clmulepi64_si128(X0,M,0);
+    __m128i A0{};A0[0]^=A[0]&(~uint16_t(0));
+    __m128i B = _mm_clmulepi64_si128(A0,M,0);
+    return A[0]^(A[0]>>16)^(B[0]>>16)^X[0]^(X[0]>>16);
   }
   
   uint32_t const clmul_mod(const uint32_t& i,const uint32_t& j){
-    const __m128i I{(const int64_t)(i) ,0ull};
-    const __m128i J{(const int64_t)(j) ,0ull};
-    const __m128i M{1073877003u,0ull};
-    const __m128i X = _mm_clmulepi64_si128(I,J,0);
-    const __m128i A = _mm_clmulepi64_si128(X,M,0);
-    const __m128i B = _mm_clmulepi64_si128(A,M,0);
-    return A[0]^A[1]^B[1]^X[0]^X[1]; // TODO
+    __m128i I{}; I[0]^=i;
+    __m128i J{}; J[0]^=j;
+    __m128i M{}; M[0]^=1073877003u;
+    __m128i X = _mm_clmulepi64_si128(I,J,0);
+    __m128i X0{};X0[0]^=X[0]&(~uint32_t(0));
+    __m128i A = _mm_clmulepi64_si128(X0,M,0);
+    __m128i A0{};A0[0]^=A[0]&(~uint32_t(0));
+    __m128i B = _mm_clmulepi64_si128(A0,M,0);
+    return A[0]^(A[0]>>32)^(B[0]>>32)^X[0]^(X[0]>>32);
   }
   
   uint64_t const clmul_mod(const uint64_t& i,const uint64_t& j){
-    const __m128i I{(const int64_t)(i) ,0ull};
-    const __m128i J{(const int64_t)(j) ,0ull};
-    const __m128i M{int64_t(0xb000000000000000ull),0ull};
-    const __m128i X = _mm_clmulepi64_si128(I,J,0);
-    const __m128i A = _mm_clmulepi64_si128(X,M,0);
-    const __m128i B = _mm_clmulepi64_si128(A,M,0);
-    return A[0]^A[1]^B[1]^X[0]^X[1]; // DONE but broken :/
+    __m128i I{};I[0]^=i;
+    __m128i J{};J[0]^=j;
+    __m128i M{};M[0]^=0xb000000000000000ull;
+    __m128i X = _mm_clmulepi64_si128(I,J,0);
+    __m128i A = _mm_clmulepi64_si128(X,M,0);
+    __m128i B = _mm_clmulepi64_si128(A,M,0);
+    return A[0]^A[1]^B[1]^X[0]^X[1];
   }
   
   uint8_t const clmul_circ(const uint8_t& a,const uint8_t& b){
@@ -607,8 +623,12 @@ namespace wmath{
   }
   
   uint64_t const clmul_circ(const uint64_t& a,const uint64_t& b){
-    __m128i ma{(const int64_t)(a),0ull};
-    __m128i mb{(const int64_t)(b),0ull};
+    int64_t _a(0);
+    int64_t _b(0);
+    _a^=a;
+    _b^=b;
+    __m128i ma{_a,0ull};
+    __m128i mb{_b,0ull};
     auto t = _mm_clmulepi64_si128(ma,mb,0);
     return t[0]^t[1];
   }
@@ -729,7 +749,7 @@ namespace wmath{
   }
   
   uint32_t constexpr ctz(const uint32_t x){
-    return x==0?32:__builtin_clzl(reflect(x));
+    return x==0?32:__builtin_ctz(x);
   }
   
   uint64_t constexpr clz(const uint64_t x){
@@ -737,7 +757,7 @@ namespace wmath{
   }
   
   uint64_t constexpr ctz(const uint64_t x){
-    return x==0?64:__builtin_clzl(reflect(x));
+    return x==0?64:__builtin_ctz(x);
   }
 
   uint32_t constexpr log2(const uint32_t x){
