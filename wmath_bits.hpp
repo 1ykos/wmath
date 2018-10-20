@@ -745,7 +745,7 @@ namespace wmath{
 //this seems to be worth it, default log2 and clz is not as performant 
 #if __GNUC__ > 3 || __clang__
   uint32_t constexpr clz(const uint32_t x){
-    return x==0?32:__builtin_clzl(x);
+    return x==0?32:__builtin_clz(x);
   }
   
   uint32_t constexpr ctz(const uint32_t x){
@@ -753,15 +753,15 @@ namespace wmath{
   }
   
   uint64_t constexpr clz(const uint64_t x){
-    return x==0?64:__builtin_clzl(x);
+    return x==0?64:__builtin_clzll(x);
   }
   
   uint64_t constexpr ctz(const uint64_t x){
-    return x==0?64:__builtin_ctz(x);
+    return x==0?64:__builtin_ctzll(x);
   }
 
   uint32_t constexpr log2(const uint32_t x){
-    return x==0?0:31-__builtin_clzl(x);
+    return x==0?0:31-__builtin_clz(x);
   }
   
   uint64_t constexpr log2(const uint64_t x){
