@@ -30,7 +30,6 @@ namespace wmath{
   template<typename T0,typename T1,typename T2>
   constexpr T0 clip(const T0& n,const T1& l,const T2& h){
     return n<l?l:n>h?h:n;
-    return min(max(n,l),h);
   }
   
   template<typename T>
@@ -49,7 +48,7 @@ namespace wmath{
   template <typename T>
   typename std::enable_if<std::is_integral<T>::value,T>::type
   constexpr roundup_2_3(const T& n){
-    if (n<0) return -roundup_2_3(n);
+    if (n<0) return -roundup_2_3(-n);
     if (n==0) return 1;
     if (n<4) return n;
     if (n%2==0) return 2*roundup_2_3(n/2);
@@ -60,7 +59,7 @@ namespace wmath{
   template <typename T>
   typename std::enable_if<std::is_integral<T>::value,T>::type
   constexpr roundup_2(const T& n){
-    if (n<0) return -roundup_2(n);
+    if (n<0) return -roundup_2(-n);
     if (n==0) return 1;
     if (n<3) return n;
     if (n%2==0) return 2*roundup_2(n/2);
@@ -405,14 +404,118 @@ namespace wmath{
       T &mean,
       T &M2
       ){
-    // if weight too small then what? It will be your fault if it breaks...
-    // if (w<numeric_limits<T>::epsilon()) return;
+    if (w<numeric_limits<T>::min()) return;
     const T temp = w+sumw;
     const T delta = x-mean;
     const T R = delta*w/temp;
     mean += R;
     M2   += sumw*delta*R; // sumw*(x-mean)*(x-mean)*w/(sumw+w)
     sumw  = temp;
+  }
+  
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value,T>::type
+  const inline mean_variance_sumw_dx(
+      const T &x,
+      const T &w,
+      const T &sumw,
+      const T &mean,
+      const T &M2
+      ){
+    return 0;
+  }
+  
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value,T>::type
+  const inline mean_variance_sumw_dw(
+      const T &x,
+      const T &w,
+      const T &sumw,
+      const T &mean,
+      const T &M2
+      ){
+    return 1;
+  }
+  
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value,T>::type
+  const inline mean_variance_mean_dx(
+      const T &x,
+      const T &w,
+      const T &sumw,
+      const T &mean,
+      const T &M2
+      ){
+    return w/sumw;
+  }
+
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value,T>::type
+  const inline mean_variance_mean_dw(
+      const T &x,
+      const T &w,
+      const T &sumw,
+      const T &mean,
+      const T &M2
+      ){
+    return (x-mean)/sumw;
+  }
+
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value,T>::type
+  const inline mean_variance_M2_dx_ini( // initial
+      const T &x,
+      const T &w,
+      const T &sumw,
+      const T &mean,
+      const T &M2
+      ){
+    return 2*w*(1-w/sumw)*(x-mean);
+  }
+  
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value,T>::type
+  const inline mean_variance_M2_dx_acc( // needs to be accumulated
+      const T &x,
+      const T &w,
+      const T &w0,
+      const T &sumw,
+      const T &mean,
+      const T &M2
+      ){
+    return -2*w0*w*(x-mean)/sumw;
+  }
+
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value,T>::type
+  const inline mean_variance_M2_dw_ini(
+      const T &x,
+      const T &w,
+      const T &sumw,
+      const T &mean,
+      const T &M2
+      ){
+    return (x-mean)*(x-mean);
+  }
+
+
+//       (x0-mean)^2
+// +2*w3*(mean-x0)*(x3-mean)/sumw
+// +2*w2*(mean-x0)*(x2-mean)/sumw
+// +2*w1*(mean-x0)*(x1-mean)/sumw
+// +2*w0*(mean-x0)*(x0-mean)/sumw
+// + ...
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value,T>::type
+  const inline mean_variance_M2_dw_acc(
+      const T &x,
+      const T &w,
+      const T &x0,
+      const T &sumw,
+      const T &mean,
+      const T &M2
+      ){
+    return 2*w/sumw*(mean-x0)*(x-mean);
   }
 
 
@@ -578,16 +681,17 @@ namespace wmath{
 
   template<class target>
   inline double golden_section_search(double  a, double  va,
-                                          double  b, double  vb,
-                                          target function){
+                                      double  b, double  vb,
+                                      const target& function,
+                                      const double epsilon = 1e-8){
     //cerr << "entering golden section search" << endl;
     //cerr << a << " " << b << endl;
     //cerr << va << " " << vb << endl;
-    const double gr = (sqrt(5.0) + 1.0) * 0.5;
-    const double epsilon = 1e-6;
+    const double  phi = (sqrt(5.0) + 1.0) * 0.5;
+    const double iphi = 1.0/phi;
     while (true){
-      const double c = b-(b-a)/gr;
-      const double d = a+(b-a)/gr;
+      const double c = b-(b-a)*iphi;
+      const double d = a+(b-a)*iphi;
       //cerr << a << " " << c << " " << d << " " << b << endl;
       if (d-c<epsilon) break;
       const double vc=function(c);
@@ -603,6 +707,97 @@ namespace wmath{
       //cerr << va << " " << vb << endl;
     }
     return a+(b-a)*0.5;
+  }
+  
+  
+  template<class summand>
+  const auto sum(
+      const summand& s,
+      const size_t& n0,
+      const size_t& N
+      );
+
+  template<class summand>
+  const auto sum(
+      const summand& s,
+      const size_t& n0,
+      const size_t& N
+      ){
+    if (N==n0) return s(N);
+    return sum(s,n0,N-1)+s(N);
+    return sum(s,n0+1,N)+s(n0);
+  }
+  
+  template<class factor>
+  const auto product(
+      const factor& f,
+      const size_t& n0,
+      const size_t& N
+      ){
+    if (N==n0) return f(N);
+    return product(f,n0,N-1)*f(N);
+  }
+
+  template<typename T>
+  constexpr T binom(
+      const size_t& n,
+      const size_t& k){
+    if (k>n)   return 0;
+    if (n-k<k) return binom<T>(n,n-k);
+    T v(1);
+    for (size_t i=1;i<=k;++i){
+      v*=(n+1-i);
+      v/=i;
+    }
+    return v;
+  }
+
+  template<class series_summand>
+  inline auto aitken_delta_squared(
+      const series_summand& s,
+      const size_t& N
+      ){
+    auto s0  = s(0);
+    auto s1  = s(1)+s0;
+    auto s2  = s(2)+s1;
+    auto axn = s2;
+    for (size_t n=1;;++n){
+      if (abs(s2-s1)==0)           break;
+      if (abs((s2-s1)-(s1-s0))<numeric_limits<double>::epsilon()) break;
+      axn = s2-pow(s2-s1,2)/((s2-s1)-(s1-s0));
+      //cerr << n << endl;
+      if (n>=N) return axn;
+      s0=s1;
+      s1=s2;
+      s2+=s(n+2);
+    }
+    return axn;
+  }
+ 
+  template<typename T>
+  constexpr complex<T> riemann_zeta_subsummand(
+      const complex<T>& s,
+      const size_t& n,
+      const size_t& k
+      ){
+    return binom<T>(n,k)*T(k%2==0?1:-1)*pow(complex<T>(k+1),-s);
+  }
+
+  template<typename T>
+  constexpr complex<T> riemann_zeta_summand(
+      const complex<T>& s,
+      const size_t& n
+      ){
+    return sum(bind(riemann_zeta_subsummand<T>,s,n,_1),0,n)/T(pow(T(2),T(n+1)));
+  }
+
+  template<typename T>
+  constexpr complex<T> riemann_zeta(
+      const complex<T>& s,
+      const size_t& N = 256
+      ){
+    return sum(bind(riemann_zeta_summand<T>,s,_1),0,N)
+          /(complex<T>(1)-pow(T(2),complex<T>(1)-s));
   }
 
   template<class target>

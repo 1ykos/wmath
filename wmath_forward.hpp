@@ -4,7 +4,9 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <complex>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -13,19 +15,21 @@
 #include <numeric>
 #include <random>
 #include <vector>
-#include <cstring>
 #if defined (__has_include) && (__has_include(<x86intrin.h>))
 #include <x86intrin.h>
 #endif
 #include <bitset>
 
 namespace wmath{
+  using namespace std::placeholders;
   using std::abs;
   using std::accumulate;
   using std::advance;
   using std::array;
   using std::bernoulli_distribution;
+  using std::bind;
   using std::cerr;
+  using std::complex;
   using std::conditional;
   using std::cout;
   using std::distance;
@@ -47,7 +51,9 @@ namespace wmath{
   using std::iterator;
   using std::iterator_traits;
   using std::make_unsigned;
+  using std::max;
   using std::memcpy;
+  using std::min;
   using std::min_element;
   using std::numeric_limits;
   using std::pair;

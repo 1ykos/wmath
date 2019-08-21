@@ -28,7 +28,7 @@ namespace wmath{
     const T r0 = (r1<t4)+(t4<t3)+(t1>>N)+(t2>>N)+t0;
     return {r0,r1};
   }
-
+  
 #ifdef __SIZEOF_INT128__
   template<>
   tuple<uint64_t,uint64_t>
@@ -43,7 +43,7 @@ namespace wmath{
     const int_fast16_t r = int_fast16_t(a)*int_fast16_t(b);
     return {uint8_t(r>>8),uint8_t(r)};
   }
-  
+ 
   template<>
   tuple<uint16_t,uint16_t> constexpr long_mul(
       const uint16_t& a,
@@ -519,14 +519,24 @@ namespace wmath{
    * reduction with an irreducible polynomial on GF(2^k)
    *
    */
-  
+
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr clmul(const T& a,const T& b){
+    T result(0);
+    for (size_t i=0;i!=digits(a);++i){
+      if (a&(T(1)<<i)) result^=b<<i;
+    }
+    return result;
+  }
+
   /* circmul with an odious integer is a bijection on the integers modulo m
    * odious := odd number of 1s in binary
    * popcount(b)%2==1
    * 2**m-1
    * can be represented as sum of rotations of a (?)
    */
-  template <typename T>
+  template<typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr circmul(const T& a, const T& b){
     /*const size_t s = digits(a)/2;
@@ -554,10 +564,89 @@ namespace wmath{
     }
     return p;
   }
+  
+  // 01234567
+  // 11000101
+  // 0157----
+
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  const inline pext(const T& n, const T& mask){
+    T result(0);
+    for (size_t i=0,j=0;i!=digits(n);++i){
+      const T b = T(1)<<i;
+      if (mask&b) result|=b&(n>>(i-j));
+      else ++j;
+    }
+    return result;
+  }
+  
+  // 01234567
+  // 11000101
+  // 01---5-7
+
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  const inline pdep(const T& n, const T& mask){
+    T result(0);
+    for (size_t i=0;i!=digits(n);++i){
+      const T b = T(1)<<i;
+      if (mask&b) result|=b&n;
+    }
+    return result;
+  }
+
 
 #if defined (__has_include) && (__has_include(<x86intrin.h>))
+  
+#if defined (__BMI2__)
+  uint16_t const inline pdep(const uint16_t& n,const uint16_t& mask){
+    return _pdep_u32(n,mask);
+  }
 
-  uint16_t const clmul_mod(const uint16_t& i,const uint16_t& j){
+  uint32_t const inline pdep(const uint32_t& n,const uint32_t& mask){
+    return _pdep_u32(n,mask);
+  }
+  
+  uint64_t const inline pdep(const uint64_t& n,const uint64_t& mask){
+    return _pdep_u64(n,mask);
+  }
+  
+  uint16_t const inline pext(const uint16_t& n,const uint16_t& mask){
+    return _pext_u32(n,mask);
+  }
+
+  uint32_t const inline pext(const uint32_t& n,const uint32_t& mask){
+    return _pext_u32(n,mask);
+  }
+  
+  uint64_t const inline pext(const uint64_t& n,const uint64_t& mask){
+    return _pext_u64(n,mask);
+  }
+#endif // __BMI2__
+
+  uint16_t const inline clmul(const uint16_t& i,const uint16_t& j){
+    __m128i I{}; I[0]^=i;
+    __m128i J{}; J[0]^=j;
+    __m128i X = _mm_clmulepi64_si128(I,J,0);
+    return X[0];
+  }
+  
+  uint32_t const inline clmul(const uint32_t& i,const uint32_t& j){
+    __m128i I{}; I[0]^=i;
+    __m128i J{}; J[0]^=j;
+    __m128i X = _mm_clmulepi64_si128(I,J,0);
+    return X[0];
+  }
+  
+  uint64_t const inline clmul(const uint64_t& i,const uint64_t& j){
+    __m128i I{};I[0]^=i;
+    __m128i J{};J[0]^=j;
+    __m128i X = _mm_clmulepi64_si128(I,J,0);
+    return X[0];
+  }
+
+  uint16_t const inline clmul_mod(const uint16_t& i,const uint16_t& j){
     __m128i I{}; I[0]^=i;
     __m128i J{}; J[0]^=j;
     __m128i M{}; M[0]^=29189u;
@@ -569,7 +658,7 @@ namespace wmath{
     return A[0]^(A[0]>>16)^(B[0]>>16)^X[0]^(X[0]>>16);
   }
   
-  uint32_t const clmul_mod(const uint32_t& i,const uint32_t& j){
+  uint32_t const inline clmul_mod(const uint32_t& i,const uint32_t& j){
     __m128i I{}; I[0]^=i;
     __m128i J{}; J[0]^=j;
     __m128i M{}; M[0]^=1073877003u;
@@ -581,7 +670,7 @@ namespace wmath{
     return A[0]^(A[0]>>32)^(B[0]>>32)^X[0]^(X[0]>>32);
   }
   
-  uint64_t const clmul_mod(const uint64_t& i,const uint64_t& j){
+  uint64_t const inline clmul_mod(const uint64_t& i,const uint64_t& j){
     __m128i I{};I[0]^=i;
     __m128i J{};J[0]^=j;
     __m128i M{};M[0]^=0xb000000000000000ull;
@@ -589,6 +678,29 @@ namespace wmath{
     __m128i A = _mm_clmulepi64_si128(X,M,0);
     __m128i B = _mm_clmulepi64_si128(A,M,0);
     return A[0]^A[1]^B[1]^X[0]^X[1];
+  }
+  
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  const inline clmul_mod_pow(
+            T  i,
+      const T& j,
+       size_t  k){
+    uint64_t r = 0;
+    while(k){
+      if (k&size_t(1)) r^=i;
+      i=clmul_mod(i,i);
+      k>>=1;
+    }
+    return r;
+  }
+
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  const inline clmul_mod_inverse(
+      const T& A
+      ) {
+    return clmul_mod_pow(A,T(0)-T(2));
   }
   
   uint8_t const clmul_circ(const uint8_t& a,const uint8_t& b){
@@ -632,6 +744,7 @@ namespace wmath{
     auto t = _mm_clmulepi64_si128(ma,mb,0);
     return t[0]^t[1];
   }
+
 #else
 
   uint16_t constexpr clmul_mod(uint16_t a, uint16_t b){
@@ -742,7 +855,6 @@ namespace wmath{
            log2(x,lower,(upper+lower)/2));
   }
 
-//this seems to be worth it, default log2 and clz is not as performant 
 #if __GNUC__ > 3 || __clang__
   uint32_t constexpr clz(const uint32_t x){
     return x==0?32:__builtin_clz(x);

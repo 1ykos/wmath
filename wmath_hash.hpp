@@ -19,6 +19,37 @@ namespace wmath{
   using std::is_fundamental;
   using std::numeric_limits;
   
+  template <typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr distribute(const T& a); // mix the hash value good, clmul_circ
+                                    // with odious integer is suitable
+
+  uint8_t  const inline distribute(const uint8_t& a){
+    return clmul_circ(a,uint8_t(0b01000101u));
+    return (a+111)*97;
+  } 
+  uint16_t const inline distribute(const uint16_t& a){
+    return clmul_mod(a,uint16_t(0b01000101'10100101u));
+    return (a+36690)*43581;
+  }
+  uint32_t const inline distribute(const uint32_t& a){
+    const uint32_t c0 = 3107070805ul;
+    const uint32_t c1 = 3061963241ul;
+    return rol((a+c1)*c0,16)*c1;
+    return clmul_mod(uint32_t(a+3061963241ul),uint32_t(3107070805ul));
+    return (a^(a>>16))*3061963241ul;
+  }
+  uint64_t const inline distribute(const uint64_t& a){
+    const uint64_t c0 = 16123805160827025777ull;
+    const uint64_t c1 =  3619632413061963241ull;
+    return rol((a+c0)*c1,32)*c0;
+    return clmul_mod(a,uint64_t(16123805160827025777ull))
+          *16123805160827025777ull;
+    return (a^(a>>32))*16123805160827025777ull;
+    return (a+3619632413061963241ull)*16123805160827025777ull;
+  }
+  
+  
   template<typename,typename=void>
   struct is_injective : false_type {};
 
@@ -41,13 +72,10 @@ namespace wmath{
     return std::hash<T>()(v);
   }
 
-  size_t constexpr hash(const size_t& v){
-    return v;
-  }
-  
   size_t constexpr hash(const size_t& v0,const size_t& v1) {
     // This hash_combine is slightly better than what boost offers, but it could
     // be better too by using multiplication in a galois field like ghash
+    // or just any multiplication at all
     const size_t i = 1+(numeric_limits<size_t>::digits*144+116)/233;
     const size_t m = numeric_limits<size_t>::digits-1;
     const size_t c = i&m;
@@ -55,7 +83,9 @@ namespace wmath{
     return ((n<<c)|(n>>((-c)&m)))^(v0-v1);
   }
 
-  template<class K> typename enable_if<is_fundamental<K>::value,size_t>::type
+  template<class K>
+  typename enable_if<(sizeof(K)>sizeof(size_t)
+                   &&is_fundamental<K>::value),size_t>::type
   constexpr hash(const K& k){
     size_t h(k);
     const size_t n = sizeof(K)/sizeof(size_t);
@@ -63,10 +93,62 @@ namespace wmath{
       h = hash(h,size_t(k>>(i*CHAR_BIT)));
     return h;
   }
+
+  uint8_t constexpr hash(const uint8_t& v){
+    return v;
+  }
+
+  uint8_t constexpr hash(const int8_t& v){
+    return v;
+  }
+
+  uint16_t constexpr hash(const uint16_t& v){
+    return v;
+  }
+
+  uint16_t constexpr hash(const int16_t& v){
+    return v;
+  }
+
+  uint32_t constexpr hash(const uint32_t& v){
+    return v;
+  }
+
+  uint32_t constexpr hash(const int32_t& v){
+    return v;
+  }
+
+  uint64_t constexpr hash(const uint64_t& v){
+    return v;
+  }
+
+  uint64_t constexpr hash(const int64_t& v){
+    return v;
+  }
  
   template <typename T,typename... Rest>
   size_t constexpr hash(const T& v,Rest... rest);
+
+  uint16_t constexpr hash(const uint8_t& v0,const uint8_t& v1){
+    return (uint16_t(v0)<<8)^uint16_t(v1);
+  }
+
+  uint32_t constexpr hash(const uint16_t& v0,const uint16_t& v1){
+    return (uint32_t(v0)<<16)^(uint32_t(v1));
+  }
   
+  uint64_t constexpr hash(const uint32_t& v0,const uint32_t& v1){
+    return (uint64_t(v0)<<32)^(uint64_t(v1));
+  }
+  
+  uint64_t constexpr hash(const uint64_t& v0,const uint32_t& v1){
+    return hash(uint64_t(v0),uint64_t(v1));
+  }
+  
+  uint64_t constexpr hash(const uint32_t& v0,const uint64_t& v1){
+    return hash(uint64_t(v0),uint64_t(v1));
+  }
+
   template<typename T,size_t... I>
   size_t constexpr hash_tuple_impl(const T& t, index_sequence<I...>){
     return hash(std::get<I>(t)...);
@@ -75,6 +157,18 @@ namespace wmath{
   template<typename... Ts>
   size_t constexpr hash(const tuple<Ts...>& t){
     return hash_tuple_impl(t,index_sequence_for<Ts...>{});
+  }
+
+  template<typename T,size_t n>
+  size_t constexpr hash(const array<T,n> a){
+    size_t h(0);
+    for (size_t i=0;i!=n;++i) {
+      if constexpr(sizeof(T)<=sizeof(size_t))
+        if (i%(sizeof(size_t)/sizeof(T))==0) h = distribute(h); 
+      h = rol(h,sizeof(T)*CHAR_BIT)^hash(a[i]);
+      if constexpr(sizeof(T)>sizeof(size_t)) h = distribute(h);
+    }
+    return h;
   }
   
   template <typename T, typename... Rest>
@@ -99,11 +193,26 @@ namespace wmath{
     // be injective and I will make it so
     typedef typename integral_constant<bool,sizeof(K)<=sizeof(size_t)>::type
       is_injective;
-    size_t constexpr operator()(const K& k) const {
+    //typedef typename integral_constant<CHAR_BIT*sizeof(K)>::type bits; 
+    auto constexpr operator()(const K& k) const {
       return hash(k);
     }
   };
-
+  
+  template<typename T,size_t n>
+  struct hash_functor<
+    array<T,n>,void>
+  {
+    // if size_t has at least as many digits as the hashed type the hash can
+    // be injective and I will make it so
+    typedef typename integral_constant<bool,n*sizeof(T)<=sizeof(size_t)>::type
+      is_injective;
+    //typedef typename integral_constant<CHAR_BIT*sizeof(K)>::type bits; 
+    auto constexpr operator()(const array<T,n>& k) const {
+      return hash(k);
+    }
+  };
+ 
   /*
   template<> struct
   hash<typename enable_if<sizeof(bool)<=sizeof(size_t),bool>::type>

@@ -6,10 +6,10 @@ namespace wmath{
   typename std::enable_if<std::is_integral<T>::value,bool>::type
   constexpr is_prime(const T& n){
     if (n<2) return false;
-    if (n%2 ==0)  return false;
-    if (n%3 ==0)  return false;
-    if (n%5 ==0)  return false;
-    if (n<31) return true;
+    if (n%2 ==0)  return n==2;
+    if (n%3 ==0)  return n==3;
+    if (n%5 ==0)  return n==5;
+    if (n<49) return true;
     const T m = n%30;
     switch(m){
       case 1:
