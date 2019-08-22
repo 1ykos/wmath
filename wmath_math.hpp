@@ -341,7 +341,7 @@ namespace wmath{
     if (n==0) return 0;
     T l = log2(n)/T(2);
     T t0 = ((n>>l)+(T(1)<<l))/T(2);
-    T t1,t2; 
+    T t1(0),t2(0); 
     while (true){
       t2 = t1;
       t1 = t0;
