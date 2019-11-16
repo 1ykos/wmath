@@ -29,27 +29,55 @@ namespace wmath{
     return (a+111)*97;
   } 
   uint16_t const inline distribute(const uint16_t& a){
-    return clmul_mod(a,uint16_t(0b01000101'10100101u));
     return (a+36690)*43581;
+    return clmul_mod(a,uint16_t(0b01000101'10100101u));
   }
   uint32_t const inline distribute(const uint32_t& a){
+    const uint32_t  b = 0x55555555ul;
     const uint32_t c0 = 3107070805ul;
     const uint32_t c1 = 3061963241ul;
-    return rol((a+c1)*c0,16)*c1;
+    const uint32_t  n = (a^(a>>16))*b;
+    return n^(n>>16);
+    return rol(rol(a*c0,16)*c1,16);
     return clmul_mod(uint32_t(a+3061963241ul),uint32_t(3107070805ul));
     return (a^(a>>16))*3061963241ul;
   }
   uint64_t const inline distribute(const uint64_t& a){
+    const uint64_t  b =   0x5555555555555555ull;
     const uint64_t c0 = 16123805160827025777ull;
-    const uint64_t c1 =  3619632413061963241ull;
-    return rol((a+c0)*c1,32)*c0;
+    const uint64_t c1 = 13834579444137454003ull;
+    const uint64_t c2 = 14210505232527258663ull;
+    const uint64_t  n = (a^(a>>32))*b;
+    return (n^(n>>32));
+    return rol(rol(a*c1,32)*c0,32);
     return clmul_mod(a,uint64_t(16123805160827025777ull))
           *16123805160827025777ull;
     return (a^(a>>32))*16123805160827025777ull;
     return (a+3619632413061963241ull)*16123805160827025777ull;
   }
-  
-  
+
+  // (n*(n+1))>>1 is bijective for unsigned integers modulo 2**m
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr bijective_square(const T& n) {
+    const unsigned int n1= n+1;
+    const unsigned int i = n>>(n1&1);
+    const unsigned int j = n1>>(n&1);
+    return i*j;
+  }
+
+  // n=rand(2**64);x=0;y=1;while y!=x
+  // do y=x; x=(x+2*(n-(x*(x+1)/2))/(2*x+1))%m; end;
+  // only works when 2*log₂(x) <= log₂(n)
+  // is there a way to make this work for all?
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr bijective_squareroot(const T& n) {
+    T x(0);
+    for (T s(0);(s=2*(n-bijective_square(x))/(2*x+1));x+=s);
+    return x;
+  }
+
   template<typename,typename=void>
   struct is_injective : false_type {};
 

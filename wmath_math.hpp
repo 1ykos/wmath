@@ -83,7 +83,66 @@ namespace wmath{
   constexpr circadd(const T& a,const T& b,const T& m){
     return (a+b)%m+((a+b)%m<a);
   }
-  
+
+  template<typename T>
+  //typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  T
+  fixponit_integer_inverse(const T& d);
+
+  template<typename T>
+  //typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  T
+  constexpr fixpoint_integer_inverse(const T& d) {
+    uint8_t lut[256] = {
+     255u,254u,253u,252u,251u,250u,249u,248u,247u,246u,245u,244u,243u,242u,241u,
+240u,240u,239u,238u,237u,236u,235u,234u,234u,233u,232u,231u,230u,229u,229u,228u,
+227u,226u,225u,225u,224u,223u,222u,222u,221u,220u,219u,219u,218u,217u,217u,216u,
+215u,214u,214u,213u,212u,212u,211u,210u,210u,209u,208u,208u,207u,206u,206u,205u,
+204u,204u,203u,202u,202u,201u,201u,200u,199u,199u,198u,197u,197u,196u,196u,195u,
+195u,194u,193u,193u,192u,192u,191u,191u,190u,189u,189u,188u,188u,187u,187u,186u,
+186u,185u,185u,184u,184u,183u,183u,182u,182u,181u,181u,180u,180u,179u,179u,178u,
+178u,177u,177u,176u,176u,175u,175u,174u,174u,173u,173u,172u,172u,172u,171u,171u,
+170u,170u,169u,169u,168u,168u,168u,167u,167u,166u,166u,165u,165u,165u,164u,164u,
+163u,163u,163u,162u,162u,161u,161u,161u,160u,160u,159u,159u,159u,158u,158u,157u,
+157u,157u,156u,156u,156u,155u,155u,154u,154u,154u,153u,153u,153u,152u,152u,152u,
+151u,151u,151u,150u,150u,149u,149u,149u,148u,148u,148u,147u,147u,147u,146u,146u,
+146u,145u,145u,145u,144u,144u,144u,144u,143u,143u,143u,142u,142u,142u,141u,141u,
+141u,140u,140u,140u,140u,139u,139u,139u,138u,138u,138u,137u,137u,137u,137u,136u,
+136u,136u,135u,135u,135u,135u,134u,134u,134u,134u,133u,133u,133u,132u,132u,132u,
+132u,131u,131u,131u,131u,130u,130u,130u,130u,129u,129u,129u,129u,128u,128u,128u,
+127u
+    };
+    const auto l = log2(d);
+    //T x = T(1)<<(digits(d)-1-l);
+    //cout << std::hex << ((d-(T(1)<<l))>>(l-8)) << endl;
+    //cout << (~T(0))/d << endl;
+    T x;
+    if (l<8) {
+      x = T(1)<<(digits(d)-1-l);
+    } else {
+      if (digits(d)>(l+8)) x = T(lut[(d>>(l-8))-256])<<(digits(d)-l-8);
+      else x = T(lut[(d>>(l-8))-256])>>(l+8-digits(d));
+      //cout << std::dec << ((d>>(l-8))-256) << endl;
+    }
+    if (x==0) x=1;
+    //T x = (~T(0))>>(log2(d)+1);
+    // x = n/d  <->  d*x = n  <->  d = n/x
+    // f(x) = (1<<digits(d))/x - d 
+    // f'(x) = -(1<<digits(d))/(x*x)
+    // x(i+1) = x - f(x)/f'(x) = x + ( x*((1<<digits(d)) - x*d) ) >> 64
+    //x+=(x*(-x*d)>>digits(d);
+    //cout << endl;
+    while(true) {
+      //cout << std::hex << "x = " << x << " -x*d = " << T(0)-x*d << endl;
+      const auto lm = long_mul(x+1,T(0)-x*d);
+      const T i = get<0>(lm);
+      //cout << " i = " << i << endl;
+      if (i) x+=i;
+      else return x;
+    }
+    return x;
+  }
+
   // TODO: Somehow is broken for negative integers
   // Function to determine lowest common denominator
   // This is a generalization of Euclids algorithm to a set of numbers
@@ -391,7 +450,7 @@ namespace wmath{
 
 /* numerically stable and incremental mean and variance
  * start with T sumw=0.0, mean=0.0, M2=0.0;
- * or with T sumw=w_1, mean=x_1, M2=?;
+ * or with T sumw=w_1, mean=x_1, M2=0;
  * and then call
  * mean_variance(x,w,sumw,mean,M2)
  * for each pair of x and w */  
@@ -411,6 +470,26 @@ namespace wmath{
     mean += R;
     M2   += sumw*delta*R; // sumw*(x-mean)*(x-mean)*w/(sumw+w)
     sumw  = temp;
+  }
+
+/* numerically stable and incremental mean
+ * start with T sumw=0.0, mean=0.0
+ * or with T sumw=w_1, mean=x_1;
+ * and then call
+ * mean_variance(x,w,sumw,mean)
+ * for each pair of x and w */  
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value>::type
+  const inline mean_variance(
+      const T &x,
+      const T &w,
+      T &sumw,
+      T &mean
+      ){
+    T M2 = 0; // mean_variance does not depend on previous values of M2
+    mean_variance(x,w,sumw,mean,M2);
+    //mean += (x-mean)*w/(sumw+w);
+    //sumw += w;
   }
   
   template<typename T>

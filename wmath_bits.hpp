@@ -11,8 +11,7 @@ namespace wmath{
   }
   
   template<typename T>
-  typename std::enable_if<std::is_unsigned<T>::value,tuple<T,T>>::type
-  constexpr long_mul(const T& a, const T& b);
+  tuple<T,T> constexpr long_mul(const T& a, const T& b);
 
   // calculate a * b = r0r1
   template<typename T>
@@ -36,6 +35,20 @@ namespace wmath{
     unsigned __int128 r = ((unsigned __int128)(a))*((unsigned __int128)(b));
     return {r>>64,r};
   }
+
+  tuple<__uint128_t,__uint128_t>
+  constexpr long_mul(const __uint128_t& a, const __uint128_t& b){
+    const int         N  = 64;
+    const __uint128_t t0 = (a>>N)*(b>>N);
+    const __uint128_t t1 = ((a<<N)>>N)*(b>>N);
+    const __uint128_t t2 = (a>>N)*((b<<N)>>N);
+    const __uint128_t t3 = ((a<<N)>>N)*((b<<N)>>N);
+    const __uint128_t t4 = t3+(t1<<N);
+    const __uint128_t r1 = t4+(t2<<N);
+    const __uint128_t r0 = (r1<t4)+(t4<t3)+(t1>>N)+(t2>>N)+t0;
+    return {r0,r1};
+  }
+
 #endif
 
   template<>
@@ -48,7 +61,7 @@ namespace wmath{
   tuple<uint16_t,uint16_t> constexpr long_mul(
       const uint16_t& a,
       const uint16_t& b){
-    const int_fast32_t r = int_fast32_t(a)*int_fast32_t(b);
+    const uint_fast32_t r = uint_fast32_t(a)*uint_fast32_t(b);
     return {uint16_t(r>>16),uint16_t(r)};
   }
   
@@ -56,7 +69,7 @@ namespace wmath{
   tuple<uint32_t,uint32_t> constexpr long_mul(
       const uint32_t& a,
       const uint32_t& b){
-    const int_fast64_t r = int_fast64_t(a)*int_fast64_t(b);
+    const uint_fast64_t r = uint_fast64_t(a)*uint_fast64_t(b);
     return {uint32_t(r>>32),uint32_t(r)};
   }
   
@@ -879,6 +892,13 @@ namespace wmath{
   uint64_t constexpr log2(const uint64_t x){
     return x==0?0:63-__builtin_clzll(x);
   }
+#ifdef __SIZEOF_INT128__
+  __uint128_t constexpr log2(const __uint128_t x){
+    if (x>>64) return log2(uint64_t(x>>64));
+    return log2(uint64_t(x&(~uint64_t(0))));
+  }
 #endif
+#endif
+
 }
 #endif // WMATH_BITS_H
