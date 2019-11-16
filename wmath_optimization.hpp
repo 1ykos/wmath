@@ -32,7 +32,7 @@ namespace wmath{
         const dlib::matrix<double,0,1>& x,
               dlib::matrix<double,0,1>& J
         ) const {
-      //cerr << x(0) << " " << x(1) << endl;
+      cout << x(0) << " " << x(1) << " " << pow((a-x(0)),2)+b*pow(x(1)-pow(x(0),2),2) << endl;
       J(0) = -4*b*x(0)*(x(1)-pow(x(0),2))-2*(a-x(0));
       J(1) = 2*b*(x(1)-pow(x(0),2));
       return pow((a-x(0)),2)+b*pow(x(1)-pow(x(0),2),2);
@@ -41,8 +41,14 @@ namespace wmath{
 
   struct count_stop_strategy{
     size_t n = 0;
-    count_stop_strategy(const size_t n): n(n) {};
-    bool operator()(const size_t i,const double v0,const double v1)const{
+    size_t m = 0;
+    count_stop_strategy(const size_t n,const size_t m): n(n),m(m) {};
+    bool operator()(
+        const size_t i,
+        const size_t j,
+        const double v0,
+        const double v1) const {
+      if (j>=m) return true;
       if (i>=n) return true;
       else      return false;
     }
@@ -124,65 +130,69 @@ namespace wmath{
     }
   }
 
-  template<class target,class stop_strategy>
+  template<long n,class target,class stop_strategy>
   void find_min(
-      dlib::matrix<double,0,1>& x0,
+      matrix<double,n,1>& x0,
       const target& f,
       const stop_strategy& stop,
       const double epsilon = 1e-8
       ){
     const double  phi = (sqrt(5.0) + 1.0) * 0.5;
     const double iphi = 1.0/phi;
-    matrix<double,0,0> H  = zeros_matrix<double>(x0.nr(),x0.nr());
-    matrix<double,0,1> J0 = zeros_matrix<double>(x0.nr(),x0.nc());
-    matrix<double,0,1> J1 = zeros_matrix<double>(x0.nr(),x0.nc());
+    matrix<double,n,n> H  = zeros_matrix<double>(x0.nr(),x0.nr());
+    matrix<double,n,1> J0 = zeros_matrix<double>(x0.nr(),x0.nc());
+    matrix<double,n,1> J1 = zeros_matrix<double>(x0.nr(),x0.nc());
     const matrix<double,0,0> I = zeros_matrix<double>(x0.nr(),x0.nr());
     double v0 = f(x0,J0);
-    matrix<double,0,1> dx = -epsilon*normalize(J0);
-    matrix<double,0,1> x1 = x0+dx;
+    matrix<double,n,1> dx = -epsilon*normalize(J0);
+    matrix<double,n,1> x1 = x0+dx;
     double alpha = 1;
     double last_min_length = epsilon;
+    size_t j=0;
     for (size_t i=0;;++i){
       double v1 = f(x1,J1);
-      cerr << x1(0)   << " " << x1(1) << " "
-           << v1      << " " << J1(0) << " " << J1(1) << " "
-           << (v1-v0) << " " << alpha << " "
-           << dx(0)   << " " << dx(1) << endl;
-      if (length(dx)>epsilon/2){
-        const matrix<double,0,1> yk = J1-J0;
-        const matrix<double,0,1> sk = dx;
-        // BFGS update:
-        matrix<double,0,0> U = yk*trans(yk)/(trans(yk)*sk);
-        if (trans(sk)*H*sk>numeric_limits<double>::epsilon())
-          U-=(H*sk*trans(sk)*trans(H))/(trans(sk)*H*sk);
-        U = H+U;
-        if (is_finite(U)){
-          dlib::cholesky_decomposition<matrix<double,0,0>> chol(U);
-          if (sum(squared(U-chol.get_l()*trans(chol.get_l())))/(U.nr()*U.nc())
-              < numeric_limits<double>::epsilon()){
-            if (v1<=v0){
-              H=U;
-              //cerr << "yay" << endl;
-            } else {
-              const double s = last_min_length/length(dx);
-              H=(s*U+H)/(1+s);
-              //cerr << "meh" << endl;
-            }
+      const matrix<double,n,1> yk = J1-J0;
+      const matrix<double,n,1> sk = dx;
+      // BFGS update:
+      //cerr << "BFGS update" << endl;
+      matrix<double,n,n> U = yk*trans(yk)/(trans(yk)*sk);
+      if (trans(sk)*H*sk>numeric_limits<double>::epsilon())
+        U-=(H*sk*trans(sk)*trans(H))/(trans(sk)*H*sk);
+      U = H+U;
+      if (is_finite(U)){
+        dlib::cholesky_decomposition<matrix<double,n,n>> chol(U);
+        if (sum(squared(U-chol.get_l()*trans(chol.get_l())))/(U.nr()*U.nc())
+            < numeric_limits<double>::epsilon()){
+          if (v1<=v0){
+            H=U;
+            ++j; // number of proper, successfull BFGS updates
+          } else {
+            const double s = last_min_length/length(dx);
+            H=(s*U+H)/(1+s);
+            //cerr << "meh" << endl;
           }
         }
       }
-      if (v1<v0){
+      if (v1<v0) {
         last_min_length=length(dx);
-        alpha*=phi;
+        // bounded by 1 as this is the solution for a quadratic function and it
+        // can only get better by accident
+        // growing fast when alpha is small, growing slower when alpha is close
+        // to 1
+        // This procedure was tested to be better than alpha*=c for all factors c
+        alpha=sqrt(alpha);
         swap(x0,x1);
         swap(v0,v1);
         swap(J0,J1);
-      } else {
+      } else { 
         alpha*=exp(-1);
       }
       dx = -alpha*pinv(H)*J0;
+      if (!(length(dx)>epsilon)) {
+        dx = -epsilon*normalize(J0);
+      }
       x1 = x0+dx;
-      if (stop(i,v0,v1)) break;
+      if (stop(i,j,v0,v1)) break;
     }
   }
 };
