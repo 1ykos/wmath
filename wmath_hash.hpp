@@ -1,499 +1,259 @@
-#ifndef WMATH_HASH_H
-#define WMATH_HASH_H
-
-#include <cstdint>
-#include <limits>
-#include <limits.h>
-#include <numeric>
-#include "wmath_forward.hpp"
-#include "wmath_primes.hpp"
-#include "wmath_bits.hpp"
-
 namespace wmath{
-  
+  using std::allocator_traits;
+  using std::array;
+  using std::cerr;
+  using std::conditional;
+  using std::cout;
   using std::enable_if;
+  using std::endl;
   using std::false_type;
-  using std::true_type;
-  using std::is_trivially_copyable;
+  using std::get;
+  using std::index_sequence;
+  using std::index_sequence_for;
+  using std::initializer_list;
   using std::integral_constant;
+  using std::is_const;
   using std::is_fundamental;
+  using std::is_same;
+  using std::is_signed;
+  using std::is_trivially_copyable;
+  using std::make_unique;
   using std::numeric_limits;
-  
-  template <typename T>
-  typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr distribute(const T& a); // mix the hash value good, clmul_circ
-                                    // with odious integer is suitable
+  using std::pair;
+  using std::setw;
+  using std::string;
+  using std::swap;
+  using std::true_type;
+  using std::tuple;
+  using std::tuple_size;
+  using std::unique_ptr;
+  using std::remove_const;
 
-  uint8_t  const inline distribute(const uint8_t& a){
-    return clmul_circ(a,uint8_t(0b01000101u));
-    return (a+111)*97;
-  } 
-  uint16_t const inline distribute(const uint16_t& a){
-    return (a+36690)*43581;
-    return clmul_mod(a,uint16_t(0b01000101'10100101u));
-  }
-  uint32_t const inline distribute(const uint32_t& a){
-    const uint32_t  b = 0x55555555ul;
-    const uint32_t c0 = 3107070805ul;
-    const uint32_t c1 = 3061963241ul;
-    const uint32_t  n = (a^(a>>16))*b;
-    return n^(n>>16);
-    return rol(rol(a*c0,16)*c1,16);
-    return clmul_mod(uint32_t(a+3061963241ul),uint32_t(3107070805ul));
-    return (a^(a>>16))*3061963241ul;
-  }
-  uint64_t const inline distribute(const uint64_t& a){
-    const uint64_t  b =   0x5555555555555555ull;
-    const uint64_t c0 = 16123805160827025777ull;
-    const uint64_t c1 = 13834579444137454003ull;
-    const uint64_t c2 = 14210505232527258663ull;
-    const uint64_t  n = (a^(a>>32))*b;
-    return (n^(n>>32));
-    return rol(rol(a*c1,32)*c0,32);
-    return clmul_mod(a,uint64_t(16123805160827025777ull))
-          *16123805160827025777ull;
-    return (a^(a>>32))*16123805160827025777ull;
-    return (a+3619632413061963241ull)*16123805160827025777ull;
-  }
+  template<typename test, template<typename...> class ref>
+  struct is_specialization : std::false_type {};
 
-  // (n*(n+1))>>1 is bijective for unsigned integers modulo 2**m
+  template<template<typename...> class ref, typename... args>
+  struct is_specialization<ref<args...>, ref>: std::true_type {};
+
   template<typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr bijective_square(const T& n) {
-    const unsigned int n1= n+1;
-    const unsigned int i = n>>(n1&1);
-    const unsigned int j = n1>>(n&1);
-    return i*j;
-  }
-
-  // n=rand(2**64);x=0;y=1;while y!=x
-  // do y=x; x=(x+2*(n-(x*(x+1)/2))/(2*x+1))%m; end;
-  // only works when 2*log₂(x) <= log₂(n)
-  // is there a way to make this work for all?
-  template<typename T>
-  typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr bijective_squareroot(const T& n) {
-    T x(0);
-    for (T s(0);(s=2*(n-bijective_square(x))/(2*x+1));x+=s);
+  constexpr modular_inverse(const T& a) {
+    T x = a&1u;
+    for (size_t i(1);i!=digits<T>();++i) x*=T(2u)-a*x;
     return x;
   }
 
-  template<typename,typename=void>
-  struct is_injective : false_type {};
-
-  template<typename T>
-  struct is_injective<T,typename enable_if<T::is_injective::value>::type>
-  : true_type {};
-  //: false_type {};
-
-  template<typename,typename=void>
-  struct has_std_hash : false_type {};
-
-  template<typename T>
-  struct has_std_hash<T,decltype(std::hash<T>()(std::declval<T>()),void())>
-  : true_type {};
-
-  template<typename T>
-  typename
-  enable_if<has_std_hash<T>::value&&(!is_fundamental<T>::value),size_t>::type
-  constexpr hash(const T& v){
-    return std::hash<T>()(v);
-  }
-
-  size_t constexpr hash(const size_t& v0,const size_t& v1) {
-    // This hash_combine is slightly better than what boost offers, but it could
-    // be better too by using multiplication in a galois field like ghash
-    // or just any multiplication at all
-    const size_t i = 1+(numeric_limits<size_t>::digits*144+116)/233;
-    const size_t m = numeric_limits<size_t>::digits-1;
-    const size_t c = i&m;
-    const size_t n = v0+v1;
-    return ((n<<c)|(n>>((-c)&m)))^(v0-v1);
-  }
-
-  template<class K>
-  typename enable_if<(sizeof(K)>sizeof(size_t)
-                   &&is_fundamental<K>::value),size_t>::type
-  constexpr hash(const K& k){
-    size_t h(k);
-    const size_t n = sizeof(K)/sizeof(size_t);
-    for (size_t i=sizeof(size_t);i<sizeof(K);i+=sizeof(size_t))
-      h = hash(h,size_t(k>>(i*CHAR_BIT)));
-    return h;
-  }
-
-  uint8_t constexpr hash(const uint8_t& v){
-    return v;
-  }
-
-  uint8_t constexpr hash(const int8_t& v){
-    return v;
-  }
-
-  uint16_t constexpr hash(const uint16_t& v){
-    return v;
-  }
-
-  uint16_t constexpr hash(const int16_t& v){
-    return v;
-  }
-
-  uint32_t constexpr hash(const uint32_t& v){
-    return v;
-  }
-
-  uint32_t constexpr hash(const int32_t& v){
-    return v;
-  }
-
-  uint64_t constexpr hash(const uint64_t& v){
-    return v;
-  }
-
-  uint64_t constexpr hash(const int64_t& v){
-    return v;
-  }
- 
-  template <typename T,typename... Rest>
-  size_t constexpr hash(const T& v,Rest... rest);
-
-  uint16_t constexpr hash(const uint8_t& v0,const uint8_t& v1){
-    return (uint16_t(v0)<<8)^uint16_t(v1);
-  }
-
-  uint32_t constexpr hash(const uint16_t& v0,const uint16_t& v1){
-    return (uint32_t(v0)<<16)^(uint32_t(v1));
-  }
+  template<typename T,class enable = void>
+  class hash;
   
-  uint64_t constexpr hash(const uint32_t& v0,const uint32_t& v1){
-    return (uint64_t(v0)<<32)^(uint64_t(v1));
-  }
-  
-  uint64_t constexpr hash(const uint64_t& v0,const uint32_t& v1){
-    return hash(uint64_t(v0),uint64_t(v1));
-  }
-  
-  uint64_t constexpr hash(const uint32_t& v0,const uint64_t& v1){
-    return hash(uint64_t(v0),uint64_t(v1));
-  }
-
-  template<typename T,size_t... I>
-  size_t constexpr hash_tuple_impl(const T& t, index_sequence<I...>){
-    return hash(std::get<I>(t)...);
-  }
-
-  template<typename... Ts>
-  size_t constexpr hash(const tuple<Ts...>& t){
-    return hash_tuple_impl(t,index_sequence_for<Ts...>{});
-  }
-
-  template<typename T,size_t n>
-  size_t constexpr hash(const array<T,n> a){
-    size_t h(0);
-    for (size_t i=0;i!=n;++i) {
-      if constexpr(sizeof(T)<=sizeof(size_t))
-        if (i%(sizeof(size_t)/sizeof(T))==0) h = distribute(h); 
-      h = rol(h,sizeof(T)*CHAR_BIT)^hash(a[i]);
-      if constexpr(sizeof(T)>sizeof(size_t)) h = distribute(h);
-    }
-    return h;
-  }
-  
-  template <typename T, typename... Rest>
-  size_t constexpr hash(const T& v, Rest... rest) {
-    return hash(hash(v),hash(rest...));
-  }
-
-  template<class K,class enable = void>
-  struct hash_functor{
-    typedef typename false_type::type is_injective;
-    size_t operator()(const K& k) const {
-      return hash(k);
-    }
-  };
-  
-  template<class K>
-  struct hash_functor<
-    K,
-    typename enable_if<is_fundamental<K>::value,void>::type
-  >{
-    // if size_t has at least as many digits as the hashed type the hash can
-    // be injective and I will make it so
-    typedef typename integral_constant<bool,sizeof(K)<=sizeof(size_t)>::type
-      is_injective;
-    //typedef typename integral_constant<CHAR_BIT*sizeof(K)>::type bits; 
-    auto constexpr operator()(const K& k) const {
-      return hash(k);
-    }
-  };
-  
-  template<typename T,size_t n>
-  struct hash_functor<
-    array<T,n>,void>
-  {
-    // if size_t has at least as many digits as the hashed type the hash can
-    // be injective and I will make it so
-    typedef typename integral_constant<bool,n*sizeof(T)<=sizeof(size_t)>::type
-      is_injective;
-    //typedef typename integral_constant<CHAR_BIT*sizeof(K)>::type bits; 
-    auto constexpr operator()(const array<T,n>& k) const {
-      return hash(k);
-    }
-  };
- 
-  /*
-  template<> struct
-  hash<typename enable_if<sizeof(bool)<=sizeof(size_t),bool>::type>
-  {
-    typedef typename true_type is_injective;
-    uint8_t constexpr operator()(const bool& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(bool)>sizeof(size_t)),bool>::type>
-  {
-    uint8_t constexpr operator()(const bool& k) const {
-      size_t h(k);
-      const size_t n = sizeof(bool)/sizeof(size_t);
-      for (size_t i=0;i!=n;++i){
-        h = hash_combine(h,size_t(k>>(i*CHAR_BIT)));
+  template<>
+  class hash<uint8_t>{
+    private:
+      const uint8_t a = 97u;
+      const uint8_t i = modular_inverse(a);
+      const uint8_t b = 111u;
+    public:
+      typedef typename true_type::type is_injective;
+      typedef typename true_type::type unhash_defined;
+      constexpr size_t digits() const {
+        return wmath::digits<uint8_t>();
       }
-      return h;
-    }
-  };
-
-  template<> struct
-  hash<typename enable_if<(sizeof(char)<=sizeof(size_t)),char>::type>
-  {
-    typedef typename true_type is_injective;
-    uint8_t constexpr operator()(const char& k) const {
-      return k;
-    }
+      constexpr uint8_t operator()(const uint8_t v) const {
+        return (v+b)*a;
+      }
+      constexpr uint8_t unhash(const uint8_t v) const {
+        return v*i-b;
+      }
   };
   
-  template<> struct
-  hash<typename enable_if<(sizeof(char)>sizeof(size_t)),char>::type>
-  {
-    uint8_t constexpr operator()(const char& k) const {
-      return k;
-    }
+  template<>
+  class hash<uint16_t>{
+    private:
+      const uint16_t a = 43581u;
+      const uint16_t i = modular_inverse(a);
+      const uint16_t b = 36690u;
+    public:
+      typedef typename true_type::type is_injective;
+      typedef typename true_type::type unhash_defined;
+      constexpr size_t digits() const {
+        return wmath::digits<uint16_t>();
+      }
+      constexpr uint16_t operator()(const uint16_t v) const {
+        return (v+b)*a;
+      }
+      constexpr uint16_t unhash(const uint16_t v) const {
+        return v*i-b;
+      }
   };
 
-  template<> struct
-  hash<typename enable_if<(sizeof(int8_t)<=sizeof(size_t)),int8_t>::type>
-  {
-    typedef typename true_type is_injective;
-    uint8_t constexpr operator()(const signed char& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(int8_t)>sizeof(size_t)),int8_t>::type>
-  {
-    uint8_t constexpr operator()(const signed char& k) const {
-      return k;
-    }
-  };
-
-  template<> struct
-  hash<typename enable_if<(sizeof(uint8_t)<=sizeof(size_t)),uint8_t>::type>
-  {
-    typedef typename true_type is_injective;
-    uint8_t constexpr operator()(const uint8_t& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(uint8_t)>sizeof(size_t)),uint8_t>::type>
-  {
-    uint8_t constexpr operator()(const uint8_t& k) const {
-      return k;
-    }
+  template<>
+  class hash<uint32_t>{
+    private:
+      const uint32_t a = 3370923577ul;
+      const uint32_t i = modular_inverse(a);
+    public:
+      typedef typename true_type::type is_injective;
+      typedef typename true_type::type unhash_defined;
+      constexpr size_t digits() const {
+        return wmath::digits<uint32_t>();
+      }
+      constexpr uint32_t operator()(uint32_t v) const {
+        v^= v>>16;
+        v*= a;
+        v^= v>>16;
+        return v;
+      }
+      constexpr uint32_t unhash(uint32_t v) const {
+        v^= v>>16;
+        v*= i;
+        v^= v>>16;
+        return v;
+      }
   };
 
-  template<> struct
-  hash<typename enable_if<(sizeof(char16_t)<=sizeof(size_t)),char16_t>::type>
-  {
-    typedef typename true_type is_injective;
-    uint16_t constexpr operator()(const char16_t& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(char16_t)>sizeof(size_t)),char16_t>::type>
-  {
-    uint16_t constexpr operator()(const char16_t& k) const {
-      return k;
-    }
-  };
-
-  template<> struct
-  hash<typename enable_if<(sizeof(char32_t)<=sizeof(size_t)),char32_t>::type>
-  {
-    typedef typename true_type is_injective;
-    uint32_t constexpr operator()(const char32_t& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(char32_t)>sizeof(size_t)),char32_t>::type>
-  {
-    uint32_t constexpr operator()(const char32_t& k) const {
-      return k;
-    }
+  template<>
+  class hash<uint64_t>{
+    private:
+      const uint64_t  a = 15864664792644967873ull;
+      const uint64_t  i = modular_inverse(a);
+    public:
+      typedef typename true_type::type is_injective;
+      typedef typename true_type::type unhash_defined;
+      constexpr size_t digits() const {
+        return wmath::digits<uint64_t>();
+      }
+      uint64_t constexpr operator()(uint64_t v) const {
+        v^= v>>32;
+        v*= a;
+        v^= v>>32;
+        return v;
+      }  
+      uint64_t constexpr unhash(uint64_t v) const {
+        const uint64_t  a = 15864664792644967873ull;
+        v^= v>>32;
+        v*= modular_inverse(a);
+        v^= v>>32;
+        return v;
+      }
   };
 
-  template<> struct
-  hash<typename enable_if<(sizeof(wchar_t)<sizeof(size_t)),wchar_t>::type>
+  template<typename S>
+  class hash<S,
+        typename enable_if<is_integral<S>::value&&is_signed<S>::value>::type>
   {
-    typedef typename true_type is_injective;
-    constexpr typename std::make_unsigned<T>::type operator()(const wchar_t& k)
-    const{
-      return k;
-    }
+    private:
+      using U = typename make_unsigned<S>::type;
+      const hash<typename remove_const<U>::type> hasher{};
+    public:
+      typedef typename true_type::type is_injective;
+      typedef typename true_type::type unhash_defined;
+      constexpr size_t digits() const {
+        return hasher.digits();
+      }
+      constexpr U operator()(const S& v) const {
+        return hasher(U(v));
+      }
+      constexpr S unhash(const U& v) const {
+        return S(hasher.unhash(v));
+      }
   };
   
-  template<> struct
-  hash<typename enable_if<(sizeof(wchar_t)>=sizeof(size_t)),wchar_t>::type>
+  template<typename T>
+  class hash<T,typename enable_if<
+  (is_fundamental<T>::value)&&(!is_integral<T>::value)
+  >::type>
   {
-    constexpr typename std::make_unsigned<T>::type operator()(const wchar_t& k)
-    const{
-      return k;
-    }
+    public:
+      typedef typename false_type::type is_injective;
+      typedef typename false_type::type unhash_defined;
+      constexpr size_t digits() const {
+        return wmath::digits<size_t>();
+      }
+      const inline size_t operator()(const T& v) const {
+        size_t h = 0;
+        for (size_t i=0;i!=sizeof(T);++i) {
+          h^=*(reinterpret_cast<const char*>(&v)+i);
+          rol(h,wmath::digits<char>());
+          if (((i%sizeof(size_t))==(sizeof(size_t)-1))||(i==(sizeof(T)-1))) {
+            h = hash<size_t>{}(h);
+          }
+          //cerr << "# " << h << endl;
+        }
+        return h;
+      }
   };
 
-  template<> struct
-  hash<typename enable_if<(sizeof(int16_t)<sizeof(size_t)),int16_t>::type>
+
+  template<>
+  class hash<string>
   {
-    typedef typename true_type is_injective;
-    uint16_t constexpr operator()(const int16_t& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(int16_t)>=sizeof(size_t)),int16_t>::type>
-  {
-    uint16_t constexpr operator()(const int16_t& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(uint16_t)<sizeof(size_t)),uint16_t>::type>
-  {
-    typedef typename true_type is_injective;
-    uint16_t constexpr operator()(const uint16_t& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(uint16_t)>=sizeof(size_t)),uint16_t>::type>
-  {
-    uint16_t constexpr operator()(const uint16_t& k) const {
-      return k;
-    }
+    public:
+      typedef typename false_type::type is_injective;
+      typedef typename false_type::type unhash_defined;
+      constexpr size_t digits() {
+        return wmath::digits<size_t>();
+      }
+      const inline size_t operator()(const string& s) const {
+        return std::hash<string>{}(s);
+      }
   };
 
-  template<> struct
-  hash<typename enable_if<(sizeof(int32_t)<sizeof(size_t)),int32_t>::type>
+  template<typename T>
+  class hash<
+    T,
+    typename enable_if<
+      is_specialization<
+        typename remove_const<T>::type,
+        tuple
+      >::value
+    >::type
+  >
   {
-    typedef typename true_type is_injective;
-    uint32_t constexpr operator()(const int32_t& k) const {
-      return k;
-    }
+    private:
+      template<size_t i = 0>
+      const size_t impl(const T& v,const size_t& h=0u)
+      const
+      {
+        if constexpr (i==tuple_size<T>::value) {
+          return h;
+        } else {
+          const auto e = get<i>(v);
+          const size_t t = hash<decltype(e)>{}(e);
+          return impl<i+1>(v,h^(size_t(2u*i+1u)*t));
+        }
+      }
+    public:
+      typedef typename false_type::type is_injective;
+      typedef typename false_type::type unhash_defined;
+      constexpr size_t digits() const {
+        return wmath::digits<size_t>();
+      }
+      const inline size_t operator()(const T& v) const {
+        return impl(v);
+      }
   };
   
-  template<> struct
-  hash<typename enable_if<(sizeof(int32_t)>=sizeof(size_t)),int32_t>::type>
+  template<typename T>
+  class hash<
+    T,
+    typename enable_if<
+      is_specialization<typename remove_const<T>::type,vector>::value
+    >::type
+  >
   {
-    uint32_t constexpr operator()(const int32_t& k) const {
-      return k;
-    }
+    public:
+      typedef typename false_type::type is_injective;
+      typedef typename false_type::type unhash_defined;
+      constexpr size_t digits() const {
+        return wmath::digits<size_t>();
+      }
+      const inline size_t operator()(const T& v) const {
+        size_t h = 0;
+        for (size_t i=0;i!=v.size();++i) {
+          auto e = v[i];
+          h^= size_t(2u*i+1u)*hash<decltype(e)>{}(e);
+        }
+        return h;
+      }
   };
-
-  template<> struct
-  hash<typename enable_if<(sizeof(uint32_t)<sizeof(size_t)),uint32_t>::type>
-    typedef typename true_type is_injective;
-    uint32_t constexpr operator()(const uint32_t& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(uint32_t)>=sizeof(size_t)),uint32_t>::type>
-  {
-    uint32_t constexpr operator()(const uint32_t& k) const {
-      return k;
-    }
-  };
-
-  template<> struct
-  hash<typename enable_if<(sizeof(int64_t)<=sizeof(size_t)),int64_t>::type>
-  {
-    typedef typename true_type is_injective;
-    uint64_t constexpr operator()(const int64_t& k) const {
-      return k;
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(int64_t)>sizeof(size_t)),int64_t>::type>
-  {
-    uint64_t constexpr operator()(const int64_t& k) const {
-      return k;
-    }
-  };
-
-  template<> struct
-  hash<typename enable_if<(sizeof(float)<=sizeof(size_t)),float>::type>
-  {
-    typedef typename true_type is_injective;
-    uint32_t operator()(const float& k) const{
-      return *reinterpret_cast<uint32_t*>(&k);
-    }
-  };
-  
-  template<> struct
-  hash<typename enable_if<(sizeof(float)>sizeof(size_t)),float>::type>
-  {
-    uint32_t operator()(const float& k) const{
-      return *reinterpret_cast<uint32_t*>(&k);
-    }
-  };
-
-  template<> struct
-  hash<typename enable_if<(sizeof(double)<=sizeof(size_t)),double>::type>
-    typedef typename true_type is_injective;
-    uint64_t operator()(const double& k) const{
-      return *reinterpret_cast<uint32_t*>(&k);
-    }
-  };
-
-  template<> struct
-  hash<typename enable_if<(sizeof(double)>=sizeof(size_t)),double>::type>
-    uint64_t operator()(const double& k) const{
-      return *reinterpret_cast<uint32_t*>(&k);
-    }
-  };
-
-  // template<> struct hash<long double>; TODO
-  
-  template<class T>
-  hash<T*>
-  {
-    typedef typename true_type is_injective;
-    size_t constexpr operator()(const T*& k){
-      return k;
-    }
-  };
-  */
 }
-#endif // WMATH_HASH_H
