@@ -37,6 +37,16 @@ namespace wmath{
 
   template<typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr bijective_square(const T& n) {
+    T i = n;
+    T j = n+1;
+    if (j&1) i>>=1;
+    if (n&1) j>>=1;
+    return i*j;
+  }
+
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr modular_inverse(const T& a) {
     T x = a&1u;
     for (size_t i(1);i!=digits<T>();++i) x*=T(2u)-a*x;
@@ -129,7 +139,6 @@ namespace wmath{
         return v;
       }  
       uint64_t constexpr unhash(uint64_t v) const {
-        const uint64_t  a = 15864664792644967873ull;
         v^= v>>32;
         v*= modular_inverse(a);
         v^= v>>32;

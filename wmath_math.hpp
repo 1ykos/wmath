@@ -9,7 +9,10 @@ namespace wmath{
   }
 
   template <typename T0,typename T1>
-  typename std::enable_if<std::is_unsigned<T1>::value,T0>::type
+  typename std::enable_if<
+      std::is_unsigned<T1>::value
+    &&std::is_integral<T1>::value
+    ,T0>::type
   constexpr pow(const T0& x,const T1& n){
     T1 m = n;
     T0 y = 1;
@@ -39,16 +42,18 @@ namespace wmath{
   }
 
   template <typename T0,typename T1>
-  typename std::enable_if<std::is_signed<T1>::value,double>::type
+  typename std::enable_if<
+      std::is_signed<T1>::value
+    &&std::is_integral<T1>::value,
+    double>::type
   constexpr pow(const T0& x,const T1& n){
     typedef typename make_unsigned<T1>::type U;
     return n<0?1.0/pow(x,U(-n)):pow(x,U(n));
   }
   
   template <typename T>
-  typename std::enable_if<std::is_integral<T>::value,T>::type
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr roundup_2_3(const T& n){
-    if (n<0) return -roundup_2_3(-n);
     if (n==0) return 1;
     if (n<4) return n;
     if (n%2==0) return 2*roundup_2_3(n/2);
@@ -57,13 +62,9 @@ namespace wmath{
   }
   
   template <typename T>
-  typename std::enable_if<std::is_integral<T>::value,T>::type
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr roundup_2(const T& n){
-    if (n<0) return -roundup_2(-n);
-    if (n==0) return 1;
-    if (n<3) return n;
-    if (n%2==0) return 2*roundup_2(n/2);
-    return roundup_2(n+1);
+    return T(1)+(T(1)<<(log2(n-1)+1));
   }
 
   template <typename T>
@@ -391,7 +392,7 @@ namespace wmath{
     }
     return result;
   }
-  
+
 /* floor of square root of n
  */
   template<typename T>
@@ -411,7 +412,7 @@ namespace wmath{
     }
     return 0;
   }
-
+  
   /* this unfortunately does not work as std::linear_congruential_engine
    * has compile time parameters a c m ... TODO: runtime version of
    * linear_congruential_engine
@@ -472,6 +473,37 @@ namespace wmath{
     sumw  = temp;
   }
 
+/* numerically stable and incremental mean and variance
+ * start with T sumw=0.0, mean=0.0, M2=0.0;
+ * or with T sumw=w_1, mean=x_1, M2=0;
+ * and then call
+ * mean_variance(x,w,sumw,mean,M2)
+ * for each pair of x and w */  
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value>::type
+  const inline mean_variance(
+      const T &x,
+      const T &w,
+      T &sumw,
+      T &mean,
+      T &M2,
+      T &sumw2
+      ){
+    sumw2+=pow(w,2u);
+    mean_variance(x,w,sumw,mean,M2);
+  }
+
+  /* unbiased estimator for variance using reliability weigths
+   */
+  template<typename T>
+  inline const T variance(
+      const T &M2,
+      const T &sumw,
+      const T &sumw2
+      ) {
+    return M2/(sumw-sumw2/sumw);
+  }
+
 /* numerically stable and incremental mean
  * start with T sumw=0.0, mean=0.0
  * or with T sumw=w_1, mean=x_1;
@@ -485,7 +517,7 @@ namespace wmath{
       const T &w,
       T &sumw,
       T &mean
-      ){
+      ) {
     T M2 = 0; // mean_variance does not depend on previous values of M2
     mean_variance(x,w,sumw,mean,M2);
     //mean += (x-mean)*w/(sumw+w);
@@ -601,25 +633,13 @@ namespace wmath{
 /* non corrected sample variance, correction factor is n*(n-1) 
  * to be used in conjunction with mean_variance */
   template<typename T>
-  inline const T variance(
+  inline const T sample_variance(
       const T& M2,
       const T& sumw
       ){
     return M2/sumw;
   }
 
-
-/* non corrected sample variance, correction factor is n*(n-1)
- * to be used in conjunction with mean_variance
- * n being the number of x for which mean_variance was called.*/
-  template<typename T>
-  inline const T variance(
-      const T &M2,
-      const T &sumw,
-      const size_t &n
-      ){
-    return M2*n/(sumw*(n-1)); //TODO: or do I want M2/(sumw*(n-1)) ?? 
-  }
 
   template<typename T>
   struct mean_variance_calculator{
@@ -654,9 +674,35 @@ namespace wmath{
     return mv;
   }
 
+/*
+  template<typename T>
+  struct cc_pearson{
+    size_t n = 0; 
+    T M2_x   = 0;
+    T M2_y   = 0;
+    T cov    = 0;
+    T mean_x = 0;
+    T mean_y = 0;
+    T sumw   = 0;
+    T sumw2  = 0;
+    inline void push(const T& x,const T& y,const T& w) {
+      sumw      += w;
+      sumw2     += w*w;
+      const T dx = x-mean_x;
+      const T dy = y-mean_y;
+      mean_x    += (w/sumw) * dx;
+      mean_y    += (w/sumw) * dy;
+      cov       += w*dy*dy;
+      // TODO
+    }
+    T operator()() const {
+      return cov/sqrt(M2_x*M2_y);
+    }
+  }
+
   // Pearsons product moment correlation coefficient
   template<typename T>
-  class cc_pearson{
+  class cc_pearson_{
     private:
       T M2_x   =0;
       T M2_y   =0;
@@ -705,6 +751,7 @@ namespace wmath{
         sumw_xy=0;
       }
   };
+*/
 
   template<typename T>
   class cc_fisher{
@@ -1059,6 +1106,8 @@ namespace wmath{
     const size_t i = n-(j*(j-1))/2;
     return {i,j};
   }
+
+  // TODO long division
 }
 
 #endif // WMATH_MATH_H

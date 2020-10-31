@@ -11,6 +11,20 @@ namespace wmath{
   }
   
   template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,tuple<T,T>>::type
+  constexpr long_mul0(const T& a, const T& b){
+    const T N  = digits<T>()/2;
+    const T t0 = (a>>N)*(b>>N);
+    const T t1 = ((a<<N)>>N)*(b>>N);
+    const T t2 = (a>>N)*((b<<N)>>N);
+    const T t3 = ((a<<N)>>N)*((b<<N)>>N);
+    const T t4 = t3+(t1<<N);
+    const T r1 = t4+(t2<<N);
+    const T r0 = (r1<t4)+(t4<t3)+(t1>>N)+(t2>>N)+t0;
+    return {r0,r1};
+  }
+  
+  template<typename T>
   tuple<T,T> constexpr long_mul(const T& a, const T& b);
 
   // calculate a * b = r0r1
@@ -27,15 +41,16 @@ namespace wmath{
     const T r0 = (r1<t4)+(t4<t3)+(t1>>N)+(t2>>N)+t0;
     return {r0,r1};
   }
-  
+ 
 #ifdef __SIZEOF_INT128__
-  template<>
+  //template<>
   tuple<uint64_t,uint64_t>
   constexpr long_mul(const uint64_t& a, const uint64_t& b){
     unsigned __int128 r = ((unsigned __int128)(a))*((unsigned __int128)(b));
     return {r>>64,r};
   }
 
+  template<>
   tuple<__uint128_t,__uint128_t>
   constexpr long_mul(const __uint128_t& a, const __uint128_t& b){
     const int         N  = 64;
@@ -142,8 +157,7 @@ namespace wmath{
     const T m = (std::numeric_limits<T>::digits-1);
     const T c = i&m;
     return (n<<c)|(n>>((-c)&m));
-  }
-  
+  } 
 
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
@@ -886,11 +900,11 @@ namespace wmath{
   }
 
   uint32_t constexpr log2(const uint32_t x){
-    return x==0?0:31-__builtin_clz(x);
+    return 31-__builtin_clz(x);
   }
   
   uint64_t constexpr log2(const uint64_t x){
-    return x==0?0:63-__builtin_clzll(x);
+    return 63-__builtin_clzll(x);
   }
 #ifdef __SIZEOF_INT128__
   __uint128_t constexpr log2(const __uint128_t x){

@@ -1,0 +1,259 @@
+#ifndef WMATH_OPTIMIZATION_H
+#define WMATH_OPTIMIZATION_H
+#include "wmath_forward.hpp"
+#include "wmath_bits.hpp"
+
+namespace wmath{ 
+  using dlib::abs;
+  using dlib::identity_matrix;
+  using dlib::is_finite;
+  using dlib::length;
+  using dlib::length_squared;
+  using dlib::matrix;
+  using dlib::normalize;
+  using dlib::ones_matrix;
+  using dlib::squared;
+  using dlib::sum;
+  using dlib::tmp;
+  using dlib::trans;
+  using dlib::zeros_matrix;
+  //using dlib::is_nan;
+  
+  struct rosenbrock{
+    rosenbrock(const double a = 1,const double b = 100): a(a),b(b) {}
+    const double a;
+    const double b;
+    const double operator()(
+        const dlib::matrix<double,0,1>& x
+        ) const {
+      return pow((a-x(0)),2)+b*pow(x(1)-pow(x(0),2),2);
+    }
+    const double operator()(
+        const dlib::matrix<double,0,1>& x,
+              dlib::matrix<double,0,1>& J
+        ) const {
+      //cerr << x(0) << " " << x(1) << endl;
+      J(0) = -4*b*x(0)*(x(1)-pow(x(0),2))-2*(a-x(0));
+      J(1) = 2*b*(x(1)-pow(x(0),2));
+      return pow((a-x(0)),2)+b*pow(x(1)-pow(x(0),2),2);
+    }
+  };
+
+  struct count_stop_strategy{
+    size_t n = 0;
+    count_stop_strategy(const size_t n): n(n) {};
+    bool operator()(const size_t i,const double v0,const double v1)const{
+      if (i>=n) return true;
+      else      return false;
+    }
+  };
+
+  struct local_isocubic_approximation{
+    const matrix<double,0,1>& J0;
+    const matrix<double,0,0>& H0;
+    double eta;
+    double operator()(const matrix<double,0,1>& x) const {
+      return trans(J0)*x+(1.0/2)*trans(x)*H0*x+(1.0/6)*pow(trans(x)*x,3.0/2)*eta;
+    }
+    matrix<double,0,1> J(const matrix<double,0,1>& x) const {
+      return J0+H0*x+(1.0/2)*length(x)*x*eta;
+    }
+    matrix<double,0,0> H(const matrix<double,0,1>& x) const {
+      const matrix<double,0,0> I = identity_matrix<double>(x.nr()); 
+      return (length(x)>0)?H0+0.5*eta*(x*trans(x)/length(x)+length(x)*I):H0;
+    }
+  };
+
+  template<class target>
+  struct linesearch_target_wrapper{
+    const matrix<double,0,1>& x0;
+    const matrix<double,0,1>& dir;
+    const target& f;
+    linesearch_target_wrapper(
+        const matrix<double,0,1>& x0,
+        const matrix<double,0,1>& dir,
+        const target& f
+        ): x0(x0),dir(dir),f(f){}
+    matrix<double,0,1> x(const double a) const {
+      matrix<double,0,1> xa = x0+dir*a;   
+      return xa;
+    }
+    const double operator()(const double a) const {
+      return f(x(a));
+    }
+  };
+  
+  template<class target>
+  struct linesearch_target_wrapper2{
+    const matrix<double,0,1>& x0;
+    const matrix<double,0,1>& dir1;
+    const matrix<double,0,1>& dir2;
+    const target& f;
+    linesearch_target_wrapper2(
+        const matrix<double,0,1>& x0,
+        const matrix<double,0,1>& dir1,
+        const matrix<double,0,1>& dir2,
+        const target& f
+        ): x0(x0),dir1(dir1),dir2(dir2),f(f){}
+    const matrix<double,0,1> x(const double a) const {
+      return tmp(x0+dir1*a*(1-a)+dir2*a*a);
+    }
+    const double operator()(const double a) const {
+      //cerr << a*(1-a) << " " << 1-a*(1-a) << " " << f(x(a)) << endl;
+      return f(x(a));
+    }
+  };
+
+  template<class target,class stop_strategy>
+  void newton_minimize(
+      dlib::matrix<double,0,1>& x,
+      const target& f,
+      const stop_strategy& stop){
+    double v0=f(x);
+    double v1=v0;
+    for (size_t i=0;;++i){
+      v0 = v1;
+      //cerr << v0 << " " << trans(x);
+      const matrix<double,0,1> dx = -f.J(x)*pinv(f.H(x));
+      //cerr << trans(dx);
+      //linesearch_target_wrapper ltw_c(x,dx,f);
+      //const matrix<double,0,1> dir_d = normalize(f.J(x))*length(dx);
+      //linesearch_target_wrapper ltw_d(x,dir_d,f);
+      //const double c = golden_section_search(0,ltw_c(0),1,ltw_c(1),ltw_c);
+      //const double d = golden_section_search(0,ltw_d(0),1,ltw_d(1),ltw_d);
+      //cerr << c               << " " << ltw(c) << " "
+      //     << pow(0.75,min_j) << " " << ltw(pow(0.75,min_j)) << endl;
+      //if (ltw_c(c)<ltw_d(d)) x+= c*ltw_c.dir;
+      //else                   x+= d*ltw_d.dir;
+      const matrix<double,0,1> dir1 = -normalize(f.J(x))*length(dx);
+      const matrix<double,0,1> dir2 = dx;
+      linesearch_target_wrapper2 ltw(x,dir1,dir2,f);
+      //linesearch_target_wrapper ltw(x,dir2,f);
+      const double a = golden_section_search(-1,ltw(-1),1,ltw(1),ltw);
+      x=ltw.x(a);
+      /*cerr << a << " " << ltw(a) << " "
+           << ltw(-1) << " "
+           << ltw( 0) << " "
+           << ltw( 1) << endl;*/
+      v1 = f(x);
+      if (stop(i,v0,v1)) break;
+    }
+  }
+
+  template<class target,class stop_strategy>
+  void find_min(
+      dlib::matrix<double,0,1>& x0,
+      const target& f,
+      const stop_strategy& stop,
+      const double epsilon = 1e-8
+      ){
+    const double  phi = (sqrt(5.0) + 1.0) * 0.5;
+    const double iphi = 1.0/phi;
+    matrix<double,0,0> H  = zeros_matrix<double>(x0.nr(),x0.nr());
+    matrix<double,0,1> J0 = zeros_matrix<double>(x0.nr(),x0.nr());
+    matrix<double,0,1> J1 = zeros_matrix<double>(x0.nr(),x0.nr());
+    double v0 = f(x0,J0);
+    //cerr << "J0 = " << trans(J0) << endl;
+    matrix<double,0,1> dx = -epsilon*normalize(J0);
+    matrix<double,0,1> x1 = x0+dx;
+    //cerr << "dx = " << trans(dx) << endl;
+    size_t failstate = 0;
+    double stochastic_multi = 2;
+    double eta = 0;
+    double last_min_length = 0;
+    for (size_t i=0;;++i){
+      double v0 = f(x0,J0);
+      double v1 = f(x1,J1);
+      cerr << x0(0)   << " " << x0(1) << " "
+           << v0      << " " << J0(0) << " " << J0(1) << " "
+           << (v1-v0) << " " << eta << " " << failstate << " "
+           << dx(0)   << " " << dx(1) << endl;
+      //cerr << x1(0) << " " << x1(1) << " "
+      //     << v1    << " " << J1(0) << " " << J1(1) << endl;
+      //cerr << (f(x0+matrix<double,0,1>{epsilon,0.0},J0)-v0)/epsilon << " ";
+      //cerr << (f(x0+matrix<double,0,1>{0.0,epsilon},J0)-v0)/epsilon << endl;
+      v0=f(x0,J0);
+      //cerr << trans(J0) << endl;
+      //cerr << v0 << endl;
+      //cerr << trans(x1) << endl;
+      //cerr << trans(J1) << endl;
+      //cerr << v1 << endl;
+      matrix<double,0,0> U;
+      //if (((256*last_min_length + epsilon > length(dx))||(v1<=v0))
+      if (length(dx)>epsilon){
+        const matrix<double,0,1> yk = J1-J0;
+        const matrix<double,0,1> sk = dx;
+        // SR1 updadate:
+        // U = ((yk-H*dx)*trans(yk-H*dx))/(trans(yk-H*dx)*dx);
+        // BFGS update:
+        U = yk*trans(yk)/(trans(yk)*sk);
+        if (trans(sk)*H*sk>numeric_limits<double>::epsilon())
+          U-=(H*sk*trans(sk)*trans(H))/(trans(sk)*H*sk);
+        U = H+U;
+        if (is_finite(U)){
+          dlib::cholesky_decomposition<matrix<double,0,0>> chol(U);
+          if (sum(squared(U-chol.get_l()*trans(chol.get_l())))/(U.nr()*U.nc())
+              < numeric_limits<double>::epsilon()){
+            if (v1<=v0){
+              H=U;
+            } else {
+              //const double s = last_min_length*last_min_length
+              //  /(length_squared(dx)+last_min_length*last_min_length);
+              //const double s = last_min_length
+              //  /(length(dx)+last_min_length);
+              const double s = last_min_length/length(dx);
+              H=(s*U+H)/(1+s);
+            }
+          }
+        }
+      }
+      if ((v1<v0)&&(length(dx)>epsilon)){
+      //if (length(dx)>epsilon){
+        if (failstate==2) stochastic_multi*=exp(1);
+        //else stochastic_multi = length(dx)/epsilon;
+        last_min_length = length(dx);
+        //cerr << "yay" << endl;
+        //H = abs(H);
+        /*for (size_t c=0;c!=H.nc();++c) for (size_t r=0;r!=H.nr();++r)
+          H(c,r)=H(c,r)>0?H(c,r):0.0;*/
+        double eta2 = (v0+trans(J0)*dx+0.5*trans(dx)*H*dx-v1)
+          /(pow(length(dx),3));
+        //eta2 = sqrt(
+        //    pow(eta2,2)/2+length_squared(U*dx)/(length_squared(dx)*dx.nr()));
+        eta2 = abs(eta2)/2+sum(abs(H*dx-U*dx))/(length(dx))/(1+dx.nr());
+        //double eta2 = length_squared(U*dx)/(dx.nr()*(length_squared(dx)));
+        eta = (eta2+eta*exp(-1))/(1+exp(-1));
+        //eta = (eta2+eta)/2;
+        //eta = eta2;
+        swap(x0,x1);
+        swap(v0,v1);
+        swap(J0,J1);
+        failstate = 0;
+        dx=zeros_matrix<double>(x0.nr(),1);//
+        //dx=-J0*pinv(H);
+        local_isocubic_approximation lia{J0,H,eta};
+        newton_minimize(
+            dx,
+            lia,
+            count_stop_strategy(256)
+            );
+        x1+=dx;
+        //cerr << trans(dx) << endl;
+        //cerr << "SR1 update, η = " << eta << endl;
+        //cerr << H << endl;
+      } else {
+        if (failstate==2) stochastic_multi=(stochastic_multi+exp(1))*exp(-1);
+        dx = -stochastic_multi*epsilon*normalize(J0);
+        //cerr << dx << endl;
+        x1 = x0 + dx;
+        //cerr << failstate << endl;
+        //cerr << trans(x0) << endl;
+        //cerr << trans(x1) << endl;
+        failstate=2;
+      }
+      if (stop(i,v0,v1)) break;
+    }
+  }
+};
+
+#endif // WMATH_OPTIMIZATION_H
