@@ -12,7 +12,7 @@ namespace wmath{
   
   template<typename T>
   typename std::enable_if<std::is_unsigned<T>::value,tuple<T,T>>::type
-  constexpr long_mul0(const T& a, const T& b){
+  constexpr long_mul0(const T a, const T b){
     const T N  = digits<T>()/2;
     const T t0 = (a>>N)*(b>>N);
     const T t1 = ((a<<N)>>N)*(b>>N);
@@ -24,13 +24,13 @@ namespace wmath{
     return {r0,r1};
   }
   
-  template<typename T>
-  tuple<T,T> constexpr long_mul(const T& a, const T& b);
-
+  //template<typename T>
+  //constexpr long_mul(const T a, const T b);
+  
   // calculate a * b = r0r1
   template<typename T>
   typename std::enable_if<std::is_unsigned<T>::value,tuple<T,T>>::type
-  constexpr long_mul(const T& a, const T& b){
+  constexpr long_mul(const T a, const T b){
     const T N  = digits<T>()/2;
     const T t0 = (a>>N)*(b>>N);
     const T t1 = ((a<<N)>>N)*(b>>N);
@@ -45,14 +45,14 @@ namespace wmath{
 #ifdef __SIZEOF_INT128__
   //template<>
   tuple<uint64_t,uint64_t>
-  constexpr long_mul(const uint64_t& a, const uint64_t& b){
+  constexpr long_mul(const uint64_t a, const uint64_t b){
     unsigned __int128 r = ((unsigned __int128)(a))*((unsigned __int128)(b));
     return {r>>64,r};
   }
 
-  template<>
+  //template<>
   tuple<__uint128_t,__uint128_t>
-  constexpr long_mul(const __uint128_t& a, const __uint128_t& b){
+  constexpr long_mul(const __uint128_t a, const __uint128_t b){
     const int         N  = 64;
     const __uint128_t t0 = (a>>N)*(b>>N);
     const __uint128_t t1 = ((a<<N)>>N)*(b>>N);
@@ -63,35 +63,203 @@ namespace wmath{
     const __uint128_t r0 = (r1<t4)+(t4<t3)+(t1>>N)+(t2>>N)+t0;
     return {r0,r1};
   }
-
 #endif
 
+  template<typename T,size_t n,size_t m>
+  typename std::enable_if<std::is_unsigned<T>::value,array<T,max(n,m)>>::type
+  constexpr add(
+      const array<T,n> a,
+      const array<T,m> b
+      ) {
+    array<T,max(n,m)> r{};
+    bool carry = false;
+    for (size_t i=0;i!=min(n,m);++i) {
+      r[i]=carry+a[i];
+      carry=(r[i]<a[i]);
+      r[i]+=b[i];
+      carry|=r[i]<a[i];
+    }
+    if (n<m) {
+      for (size_t i=n;i!=m;++i) {
+        r[i]=carry+b[i];
+        carry=(r[i]<b[i]);
+      }
+    }
+    if (m<n) {
+      for (size_t i=m;i!=n;++i) {
+        r[i]=carry+a[i];
+        carry=(r[i]<a[i]);
+      }
+    }
+    return r;
+  }
+  
+  // compute a-b
+  template<typename T,size_t n,size_t m>
+  typename std::enable_if<std::is_unsigned<T>::value,array<T,max(n,m)>>::type
+  constexpr sub(
+      const array<T,n> a,
+      const array<T,m> b
+      ) {
+    array<T,max(n,m)> r{};
+    bool carry = false;
+    for (size_t i=0;i!=min(n,m);++i) {
+      r[i]=a[i]-carry;
+      carry=(r[i]>a[i]);
+      r[i]-=b[i];
+      carry|=r[i]>a[i];
+    }
+    if (n<m) {
+      for (size_t i=n;i!=m;++i) {
+        r[i]=T(0)-carry;
+        r[i]-=b[i];
+        carry|=(r[i]>b[i]);
+      }
+    }
+    if (m<n) {
+      for (size_t i=m;i!=n;++i) {
+        r[i]=a[i];
+        r[i]-=carry;
+        carry=(r[i]>a[i]);
+      }
+    }
+    return r;
+  }
+  
+  template<class it0,class it1>
+  void const add_with_carry(
+      const it0 a_begin,
+      const it0 a_end,
+            it1 o_begin,
+            it1 o_end
+      ) {
+    bool carry = false;
+    auto a = a_begin;
+    for (auto it=o_begin;it!=o_end;++it) {
+      *it+=carry;
+      carry=(*it)<carry;
+      if (a!=a_end) {
+        *it+=*a;
+        carry|=((*it)<(*a));
+        ++a;
+      } else {
+        if (!carry) break;
+      }
+    }
+  }
+  
+  template<class it0,class it1>
+  void const sub_with_carry(
+      const it0 a_begin,
+      const it0 a_end,
+            it1 o_begin,
+            it1 o_end
+      ) {
+    bool carry = false;
+    auto a = a_begin;
+    for (auto it=o_begin;it!=o_end;++it) {
+      const auto t = *it;
+      *it-=carry;
+      carry=(*it)>t;
+      if (a!=a_end) {
+        const auto t = *it;
+        *it-=*a;
+        carry|=((*it)>t);
+        ++a;
+      } else {
+        if (!carry) break;
+      }
+    }
+  }
+
+  template<typename T,size_t n,size_t m>
+  typename std::enable_if<std::is_unsigned<T>::value,array<T,n+m>>::type
+  constexpr long_mul(
+      const array<T,n> a,
+      const array<T,m> b
+      ) {
+    array<T,n+m> r{};
+    for (size_t j=0;j!=m;++j) {
+      for (size_t i=0;i!=n;++i) {
+        const auto t = long_mul(a[i],b[j]);
+        //cout << r[0] << " " << r[1] << " " << r[2] << " " << r[3] << endl;
+        const array<T,2> a = {get<1>(t),get<0>(t)}; 
+        add_with_carry(a.begin(),a.end(),r.begin()+i+j,r.end());
+      }
+    }
+    return r;
+  }
+  
+  // all the extra work means this is slower even though it saves one
+  // multiplication... it's about 30% slower than long_mul
+  template<typename T>
+  tuple<T,T> constexpr karatsuba(const T a, const T b) {
+    const T N  = digits<T>()/2;
+    const T x1 = a>>N;
+    const T x2 = a&((~T(0))>>N);
+    const T y1 = b>>N;
+    const T y2 = b&((~T(0))>>N);
+    const T F  = x1*y1; // multiplication 1
+    const T G  = x2*y2; // multiplication 2
+    const T t0 = x1+x2;
+    const T t1 = y1+y2;
+    // this could have overflown if it weren't masked
+    T H  = (t0&((~T(0))>>N))*(t1&((~T(0))>>N));  // multiplication 3
+    // this is the overflow
+    T o  = ((t0>>N)&&(t1>>N));
+    H+=   ((t0>>N)?(t1<<N):0);
+    o+= H<((t0>>N)?(t1<<N):0);
+    H+=   ((t1>>N)?(t0<<N):0);
+    o+= H<((t1>>N)?(t0<<N):0);
+    T K  = H;
+    o-= (K-F)>K;
+    K =  K-F;
+    o-= (K-G)>K;
+    K =  K-G;
+    T hi = F;
+    T lo = G;
+    lo += K<<N;
+    hi += lo<(K<<N);
+    hi += (K>>N)+(o<<N);
+    return tuple<T,T>{hi,lo};
+  }
+
   template<>
-  tuple<uint8_t,uint8_t> constexpr long_mul(const uint8_t& a,const uint8_t& b){
+  tuple<uint8_t,uint8_t> constexpr long_mul(const uint8_t a,const uint8_t b){
     const int_fast16_t r = int_fast16_t(a)*int_fast16_t(b);
     return {uint8_t(r>>8),uint8_t(r)};
   }
  
   template<>
   tuple<uint16_t,uint16_t> constexpr long_mul(
-      const uint16_t& a,
-      const uint16_t& b){
+      const uint16_t a,
+      const uint16_t b){
     const uint_fast32_t r = uint_fast32_t(a)*uint_fast32_t(b);
     return {uint16_t(r>>16),uint16_t(r)};
   }
   
   template<>
   tuple<uint32_t,uint32_t> constexpr long_mul(
-      const uint32_t& a,
-      const uint32_t& b){
+      const uint32_t a,
+      const uint32_t b){
     const uint_fast64_t r = uint_fast64_t(a)*uint_fast64_t(b);
     return {uint32_t(r>>32),uint32_t(r)};
   }
   
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,tuple<T,T>>::type
+  constexpr long_mul(
+      const tuple<T,T> a,
+      const tuple<T,T> b) {
+      auto ab = long_mul(get<1>(a),get<1>(b));
+      get<0>(ab) += get<0>(a)*get<1>(b)+get<1>(a)*get<0>(b);
+      return ab;
+  }
+  
   template <typename T>
-  constexpr size_t popcount(const T n){
+  constexpr size_t popcount(T n){
     size_t c=0;
-    while(n) (n&=(n-1),++c);
+    while(n) (n=n&(n-1),++c);
     return c;
   }
 
@@ -107,40 +275,39 @@ namespace wmath{
   constexpr size_t hamming_distance(const T a, const T b){
     return popcount(a^b);
   }
-  
-  template <typename T>
-  typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr inverse(const T& n){
-    if (n==0) return n;
-    return (~T(0))/n+(popcount(n)==1);
-  }
 
+  // ( a < m ) && ( b < m)
+  // ( a - b ) % m
   template <typename T>  
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr diff_mod(const T& a,const T& b,const T& m){
-    size_t r=b%m;
-    if (a<r) return m-r+a;
-    return a-r;
+    if (a<b) return m-b+a;
+    return a-b;
   }
   
+  // ( a < m ) && ( b < m )
   template <typename T>  
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr add_mod(const T& a,const T& b,const T& m){
+    T s = a + b;
+    if (s<a) s-=m;
     return ((a%m)+(b%m))%m;
   }
   
   template <typename T,typename S>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr shl(const T n, const S i){
-    if ((i<digits<T>())&&(i>=0)) return n<<i;
-    return 0;
+    if (i>=digits<T>()) return 0;
+    if (i>=0) return n<<i;
+    else      return n>>i;
   }
   
   template <typename T,typename S>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr shr(const T n, const S i){
-    if ((i<digits<T>())&&(i>=0)) return n>>i;
-    return 0;
+    if (i>=digits<T>()) return 0;
+    if (i>=0) return n>>i;
+    else      return n<<i;
   }
 
   template <typename T,typename S>
@@ -818,47 +985,11 @@ namespace wmath{
 
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr addmod(const T& a,const T& b,const T& p){
-    return ((a+b)<a?(a+b-p)%p:(a+b)%p);
-  }
-
-  uint32_t constexpr mulmod(
-      const uint32_t& a,const uint32_t& b,const uint32_t& p){
-    uint64_t o = a;
-    o*=b;
-    o%=((1ull<<32)+p);
-    return o;
-  }
-
-  /*
-  template <typename T>
-  typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr mulmod(const T& a,const T& b,const T& p){
-    const T f0  = (T(0)-p)%p;
-    const size_t s = digits(a)/2;
-    const T f1  = (T(1)<<s)%p;
-    const T m  = (~T(0))>>s;
-    const T t0 = (a>>s)*(b>>s);
-    const T t1 =  (a&m)*(b>>s);
-    const T t2 = (a>>s)*(b&m);
-    const T t3 =  (a&m)*(b&m);
-    //TODO long division or mongomery or something smart...
-    return 0;
-  }
-  */
-
-  /* Modular multiplication made into a bijection on the fixed size integers */ 
-  template <typename T>
-  typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr bijective_mulmod(const T& a, const T& b){
-    const T p = largest_prime(T(0));
-    return a>p?a:mulmod(a,b,p);
-  }
-
-  template <typename T>
-  typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr clz(const T x,const T lower=0,const T upper=digits<T>()){
-    return (upper-lower==T(1))?digits<T>()-upper:(x&(T(0)-T(1)<<((upper+lower)/2))?
+    return 
+      (upper-lower==T(1))
+        ?digits<T>()-upper
+        :(x&(T(0)-T(1)<<((upper+lower)/2))?
            clz(x,(upper+lower)/2,upper):
            clz(x,lower,(upper+lower)/2));
   }
@@ -867,10 +998,11 @@ namespace wmath{
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr ctz(const T x,const T lower=0,const T upper=digits<T>()){
     return
-      (upper-lower==T(1))?lower:(x&(T(0)-T(1)<<((upper+lower)/2))?
+      (upper-lower==T(1))
+        ?lower
+        :(x&(T(0)-T(1)<<((upper+lower)/2))?
           ctz(x,(upper+lower)/2,upper):
           ctz(x,lower,(upper+lower)/2));
-    // TODO
   }
 
 
@@ -886,17 +1018,17 @@ namespace wmath{
   uint32_t constexpr clz(const uint32_t x){
     return x==0?32:__builtin_clz(x);
   }
-  
+
   uint32_t constexpr ctz(const uint32_t x){
-    return x==0?32:__builtin_ctz(x);
+    return x==0?0:__builtin_ctz(x);
   }
-  
+ 
   uint64_t constexpr clz(const uint64_t x){
     return x==0?64:__builtin_clzll(x);
   }
-  
+
   uint64_t constexpr ctz(const uint64_t x){
-    return x==0?64:__builtin_ctzll(x);
+    return x==0?0:__builtin_ctzll(x);
   }
 
   uint32_t constexpr log2(const uint32_t x){
@@ -913,6 +1045,149 @@ namespace wmath{
   }
 #endif
 #endif
+
+  /*
+  // 2**digits(n)/n
+  template <typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr inverse(const T& n){
+    if (n==0) return n;
+    return (~T(0))/n+(popcount(n)==1);
+  }
+  */
+  
+  // modular multiplicative inverse for power two
+  // modular inverses only exist for uneven d
+  template<typename T>
+  T constexpr modular_inverse_power2(const T& d,const T& m = T(0)) {
+    T x(1); // minimally more elegant than x = d
+    //   1 + 2 + 4 + 8 + 16 + 32 + 64 ... // new correct digits starting with 1
+    //   1   3   7  15   31   63  127 ... // total correct digits
+    //j= 0   1   2   3    4    5    6 ... -> log2(n) is the correct bound
+    for (size_t j=0;j!=wmath::log2(digits(m)-clz(m-1));++j) x*=T(2u)-x*d;
+    return x&(m-1);
+  }
+  
+  // lookup tabe is just not worth it
+  template<typename T>
+  T constexpr fixpoint_integer_inverse(const T& d) {
+    T x = T(1)<<clz(d-1);
+    for (size_t j=0;j!=wmath::log2(digits<T>());++j) 
+      x+=get<0>(long_mul(x,T(1)-(x*d)));
+    return x;
+  }
+ 
+  template<typename T,size_t n>
+  array<T,n> constexpr fixpoint_integer_inverse(const array<T,n>& d) {
+    array<T,n> d1 = sub(d,array<T,1>{1}); // d1 = d-1
+    array<T,n> x{};
+    size_t p = 0;
+    for (p=n-1;p!=0;--p) if (d1[p]) break;
+    //cout << p << " " << n-p-1 << endl;
+    x[n-p-1] = T(1)<<clz(d1[p]);
+    for (size_t j=0;j!=wmath::log2(n*digits<T>());++j) {
+      //cout << "x= ";
+      //for (auto it=x.begin();it!=x.end();++it) {
+      //  cout << *it << " ";
+      //}
+      //cout << endl;
+      //cout << "x*d= ";
+      const auto xd = long_mul(x,d);
+      //for (auto it=xd.begin();it!=xd.end();++it) {
+      //  cout << *it << " ";
+      //}
+      //cout << endl;
+      array<T,n> lo;copy(xd.begin(),xd.begin()+n,lo.begin());
+      lo = sub(array<T,1>{1},lo);
+      //for (auto it=lo.begin();it!=lo.end();++it) *it=~*it;
+      const auto dx = long_mul(x,lo);
+      //cout << "dx= ";
+      //for (auto it=dx.begin();it!=dx.end();++it) {
+      //  cout << *it << " ";
+      //}
+      //cout << endl;
+      add_with_carry(dx.begin()+n,dx.end(),x.begin(),x.end());
+    }
+    return x;
+  }
+  
+  /*
+  template<typename T>
+  tuple<T,T> constexpr fixpoint_integer_inverse(const tuple<T,T>& d) {
+    tuple<T,T> x;
+    if (get<0>(d1)) {
+      get<1>(x)=T(1)<<clz(get<0>(d1));
+    } else {
+      get<0>(x)=T(1)<<clz(
+    }
+    for (size_t j=0;j!=wmath::log2(digits<T>());++j) 
+      x+=get<0>(long_mul(x+1,T(0)-(x*d)));
+    return x;
+  }
+  */
+  
+  template <typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr addmod(const T& a,const T& b,const T& p){
+    return ((a+b)<a?(a+b-p)%p:(a+b)%p);
+  }
+
+  // ( a * b ) % m with the help of i , this is Barrett reduction
+  // 1 multiplication n ,  n
+  // 1 multiplication n , 2n
+  // -> 2n log(2n) + 3n log(3n)
+  // = n ( 5 log(n) + 2 log(2) + 3 log(3) )
+  // ~ 5 n log(n)
+  // Montgommery uses two multiplication n , n
+  // -> 4 n log(4 n)
+  // = n ( 4 log(n) + 4 log(4) )
+  // ~ 4 n log(n)
+  // -> Barrett is 25% less efficient
+  // Montgomery would be 20% more efficient
+  // below is one (2n,2n) multiplication, where the lower half is not needed
+  // and one (2n,n) multiplication, where the top most part is guaranteed to be 0
+  // if m is close to 2**n i[1] is 0
+  // and only the middle part of the result is needed -> 2 n log(4 n)
+  // -> Barrett equivalent to Montgomery?
+  // yes. and it can be even faster...
+  // Wiliam Hasenplaugh, Gunnar Gaubatz and Vinodh Gopal
+  // Mongomery is dead, long live Barrett
+  template <typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr mulmod(const T& a,const T& b,const T& m,const array<T,2>& i){
+    auto ab = long_mul(a,b);
+    // cout << i[0] << "+2**64*" << i[1] << endl;
+    // quotient, maybe one too little
+    array<T,4> q = long_mul(array<T,2>{get<1>(ab),get<0>(ab)},i);
+    // auto q = get<1>(long_mul(i[0],get<0>(ab))); // if clz(m)==0
+    //cout << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
+    // trial to see if too little
+    array<T,3> t  = long_mul(array<T,2>{q[2],q[3]},array<T,1>{m});
+    // auto t = long_mul(q,m);
+    //cout << t[0] << " " << t[1] << " " << t[2] << endl;
+    array<T,2> r {get<1>(ab),get<0>(ab)};            // remainder
+    //cout << r[0] << " " << r[1] << endl;
+    sub_with_carry(t.begin(),t.end(),r.begin(),r.end());
+    //cout << r[0] << " " << r[1] << endl; 
+    const T c = ((r[1])||(r[0]>=m))?m:T(0);
+    r[0]-=c;      // no if there, so it is less efficient, but side channel
+    r[1]-=r[0]>c; // attacks. If this were to be used in a cryptographic context.
+    return r[0];
+  }
+
+  template <typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr mulmod(const T& a,const T& b,const T& m){
+    return mulmod(a,b,m,fixpoint_integer_inverse(array<T,2>{m}));
+  }
+
+  /* Modular multiplication made into a bijection on the fixed size integers */ 
+  template <typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  constexpr bijective_mulmod(const T& a, const T& b){
+    const T p = largest_prime(T(0));
+    return a>p?a:mulmod(a,b,p);
+  }
 
 }
 #endif // WMATH_BITS_H

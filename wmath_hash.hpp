@@ -45,13 +45,15 @@ namespace wmath{
     return i*j;
   }
 
+  /* now found in "wmath_bits.hpp" as modular_inverse_power2 T
   template<typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr modular_inverse(const T& a) {
-    T x = a&1u;
+    T x(1u);
     for (size_t i(1);i!=digits<T>();++i) x*=T(2u)-a*x;
     return x;
   }
+  */
 
   template<typename T,class enable = void>
   class hash;
@@ -60,7 +62,7 @@ namespace wmath{
   class hash<uint8_t>{
     private:
       const uint8_t a = 97u;
-      const uint8_t i = modular_inverse(a);
+      const uint8_t i = modular_inverse_power2(a);
       const uint8_t b = 111u;
     public:
       typedef typename true_type::type is_injective;
@@ -80,7 +82,7 @@ namespace wmath{
   class hash<uint16_t>{
     private:
       const uint16_t a = 43581u;
-      const uint16_t i = modular_inverse(a);
+      const uint16_t i = modular_inverse_power2(a);
       const uint16_t b = 36690u;
     public:
       typedef typename true_type::type is_injective;
@@ -100,7 +102,7 @@ namespace wmath{
   class hash<uint32_t>{
     private:
       const uint32_t a = 3370923577ul;
-      const uint32_t i = modular_inverse(a);
+      const uint32_t i = modular_inverse_power2(a);
     public:
       typedef typename true_type::type is_injective;
       typedef typename true_type::type unhash_defined;
@@ -125,7 +127,7 @@ namespace wmath{
   class hash<uint64_t>{
     private:
       const uint64_t  a = 15864664792644967873ull;
-      const uint64_t  i = modular_inverse(a);
+      const uint64_t  i = modular_inverse_power2(a);
     public:
       typedef typename true_type::type is_injective;
       typedef typename true_type::type unhash_defined;
@@ -140,7 +142,7 @@ namespace wmath{
       }  
       uint64_t constexpr unhash(uint64_t v) const {
         v^= v>>32;
-        v*= modular_inverse(a);
+        v*= i;
         v^= v>>32;
         return v;
       }

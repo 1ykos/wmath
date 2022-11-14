@@ -7,6 +7,7 @@
 #include <complex>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -30,6 +31,7 @@ namespace wmath{
   using std::bind;
   using std::cerr;
   using std::complex;
+  using std::copy;
   using std::conditional;
   using std::cout;
   using std::distance;
@@ -50,11 +52,13 @@ namespace wmath{
   using std::iter_swap;
   using std::iterator;
   using std::iterator_traits;
+  using std::make_tuple;
   using std::make_unsigned;
   using std::max;
   using std::memcpy;
   using std::min;
   using std::min_element;
+  using std::nth_element;
   using std::numeric_limits;
   using std::pair;
   using std::random_access_iterator_tag;
@@ -63,6 +67,7 @@ namespace wmath{
   using std::setw;
   using std::swap;
   using std::to_string;
+  using std::transform;
   using std::tuple;
   using std::unique;
   using std::vector;

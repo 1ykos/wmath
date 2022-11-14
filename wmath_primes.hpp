@@ -1,17 +1,63 @@
 #ifndef WMATH_PRIMES_H
 #define WMATH_PRIMES_H
 #include "wmath_forward.hpp"
+
 namespace wmath{
+ 
+  /* depends on a good potentiation with modulus reduction
   template <typename T>
   typename std::enable_if<std::is_integral<T>::value,bool>::type
-  constexpr is_prime(const T& n){
+  miller_rabin(
+      const T& n,
+      const T& a
+      )
+  {
+    if (n%2==0) return 0;
+    auto d = n-1;
+    // if there was a count trailing zeros intrinsic I'd use that instead
+    while (d&1u) d>>=1;
+    const auto r = pow_mod(a,d,n);
+    return (r==n-1)||(r==1);
+  }
+  */
+
+  /* deterministic miller-rabin, probably not worth it
+  Input: n > 1, an odd integer to be tested for primality
+  Output: “composite” if n is composite, “prime” otherwise
+
+  write n as 2r·d + 1 with d odd (by factoring out powers of 2 from n − 1)
+  WitnessLoop: for all a in the range [2, min(n−2, ⌊2(ln n)2⌋)]:
+    x ← ad mod n
+    if x = 1 or x = n − 1 then
+        continue WitnessLoop
+    repeat r − 1 times:
+        x ← x2 mod n
+        if x = n − 1 then
+            continue WitnessLoop
+    return “composite”
+  return “prime”
+  */
+  /*
+  is_prime(const T& n) {
+    // miller rabin with  2  3     sufficient below  1373653
+    // miller rabin with 31 73     sufficient below  9080191
+    // miller rabin with  2  3  5  sufficient below 25326001
+    // miller rabin with  2 13 23 1662803 below 1122004669633
+    // miller rabin with  2  3  5  7 11 below 2152302898747
+    // 2 3 5 7 11 13 17 19 23 29 31 37 below 318'665'857'834'031'151'167'461
+  }
+  */
+
+  template <typename T>
+  typename std::enable_if<std::is_integral<T>::value,bool>::type
+  constexpr is_prime(const T& n) {
     if (n<2) return false;
     if (n%2 ==0)  return n==2;
     if (n%3 ==0)  return n==3;
     if (n%5 ==0)  return n==5;
     if (n<49) return true;
     const T m = n%30;
-    switch(m){
+    switch(m) {
       case 1:
       case 7:
       case 11:
