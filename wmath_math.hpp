@@ -50,7 +50,19 @@ namespace wmath{
     typedef typename make_unsigned<T1>::type U;
     return n<0?1.0/pow(x,U(-n)):pow(x,U(n));
   }
+
+  // second order approximation to tetration
+  constexpr double tetration(
+      const double a,
+      const double x
+      )
+  {
+    if (x> 0) return pow(a,tetration(a,x-1));
+    if (x>-1) return 1+(2*log(a)/(1+log(a)))*x+(1-log(a))/(1+log(a))*pow(x,2);
+    else      return log(tetration(a,x+1))/log(a);
+  }
   
+  // use this to find good fourier transform dimensions
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr roundup_2_3(const T& n){
@@ -61,12 +73,14 @@ namespace wmath{
     return roundup_2_3(n+1);
   }
   
+  // round up to next power of two
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr roundup_2(const T& n){
-    return T(1)+(T(1)<<(log2(n-1)+1));
+    return (T(1)<<(log2(n-1)+1));
   }
 
+  // these three really are a strange bunch, do they even make sense?
   template <typename T>
   typename std::enable_if<std::is_unsigned<T>::value,T>::type
   constexpr circadd(const T& a,const T& b){
@@ -86,138 +100,85 @@ namespace wmath{
   }
 
   template<typename T>
-  //typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  T
-  fixponit_integer_inverse(const T& d);
-
-  template<typename T>
-  //typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  T
-  constexpr fixpoint_integer_inverse(const T& d) {
-    uint8_t lut[256] = {
-     255u,254u,253u,252u,251u,250u,249u,248u,247u,246u,245u,244u,243u,242u,241u,
-240u,240u,239u,238u,237u,236u,235u,234u,234u,233u,232u,231u,230u,229u,229u,228u,
-227u,226u,225u,225u,224u,223u,222u,222u,221u,220u,219u,219u,218u,217u,217u,216u,
-215u,214u,214u,213u,212u,212u,211u,210u,210u,209u,208u,208u,207u,206u,206u,205u,
-204u,204u,203u,202u,202u,201u,201u,200u,199u,199u,198u,197u,197u,196u,196u,195u,
-195u,194u,193u,193u,192u,192u,191u,191u,190u,189u,189u,188u,188u,187u,187u,186u,
-186u,185u,185u,184u,184u,183u,183u,182u,182u,181u,181u,180u,180u,179u,179u,178u,
-178u,177u,177u,176u,176u,175u,175u,174u,174u,173u,173u,172u,172u,172u,171u,171u,
-170u,170u,169u,169u,168u,168u,168u,167u,167u,166u,166u,165u,165u,165u,164u,164u,
-163u,163u,163u,162u,162u,161u,161u,161u,160u,160u,159u,159u,159u,158u,158u,157u,
-157u,157u,156u,156u,156u,155u,155u,154u,154u,154u,153u,153u,153u,152u,152u,152u,
-151u,151u,151u,150u,150u,149u,149u,149u,148u,148u,148u,147u,147u,147u,146u,146u,
-146u,145u,145u,145u,144u,144u,144u,144u,143u,143u,143u,142u,142u,142u,141u,141u,
-141u,140u,140u,140u,140u,139u,139u,139u,138u,138u,138u,137u,137u,137u,137u,136u,
-136u,136u,135u,135u,135u,135u,134u,134u,134u,134u,133u,133u,133u,132u,132u,132u,
-132u,131u,131u,131u,131u,130u,130u,130u,130u,129u,129u,129u,129u,128u,128u,128u,
-127u
-    };
-    const auto l = log2(d);
-    //T x = T(1)<<(digits(d)-1-l);
-    //cout << std::hex << ((d-(T(1)<<l))>>(l-8)) << endl;
-    //cout << (~T(0))/d << endl;
-    T x;
-    if (l<8) {
-      x = T(1)<<(digits(d)-1-l);
-    } else {
-      if (digits(d)>(l+8)) x = T(lut[(d>>(l-8))-256])<<(digits(d)-l-8);
-      else x = T(lut[(d>>(l-8))-256])>>(l+8-digits(d));
-      //cout << std::dec << ((d>>(l-8))-256) << endl;
+  typename std::enable_if<std::is_signed<T>::value,tuple<T,T>>::type
+  constexpr extended_euclidean(const T a, const T b)
+  {
+    T r0 = a;
+    T r1 = b;
+    T s0 = 1;
+    T s1 = 0;
+    T t0 = 0;
+    T t1 = 1;
+    while (r1) {
+      T q = r0 / r1;
+      r0 = r0 - q*r1; swap(r0,r1);
+      s0 = s0 - q*s1; swap(s0,s1);
+      t0 = t0 - q*t1; swap(t0,t1);
     }
-    if (x==0) x=1;
-    //T x = (~T(0))>>(log2(d)+1);
-    // x = n/d  <->  d*x = n  <->  d = n/x
-    // f(x) = (1<<digits(d))/x - d 
-    // f'(x) = -(1<<digits(d))/(x*x)
-    // x(i+1) = x - f(x)/f'(x) = x + ( x*((1<<digits(d)) - x*d) ) >> 64
-    //x+=(x*(-x*d)>>digits(d);
-    //cout << endl;
-    while(true) {
-      //cout << std::hex << "x = " << x << " -x*d = " << T(0)-x*d << endl;
-      const auto lm = long_mul(x+1,T(0)-x*d);
-      const T i = get<0>(lm);
-      //cout << " i = " << i << endl;
-      if (i) x+=i;
-      else return x;
-    }
-    return x;
+    // Bézout coefficients = (old_s,old_t)
+    // gcd = old_r
+    return tuple<T,T>({s0,t0});
   }
 
-  // TODO: Somehow is broken for negative integers
-  // Function to determine lowest common denominator
-  // This is a generalization of Euclids algorithm to a set of numbers
-  template <typename T, size_t N>
-  typename std::enable_if<std::is_integral<T>::value,T>::type
-  const inline gcd(array<T,N> a){
-    //for (auto it=a.begin(); it!=a.end();++it){
-    //  *it=abs(*it);
-    //}
-    auto end=a.end();
-    while(true){
-      T num=0;
-      auto newend=a.begin();
-      for (auto it=a.begin();it!=end;++it){
-        if (*it==0) continue;
-        if (it!=newend) *newend=*it;
-        ++newend;
-      }
-      end=newend;
-      auto min=min_element(
-          a.begin(),
-          end,
-          [](const T&x,const T&y){return abs(x)<abs(y);}
-          ); 
-      for (auto it=a.begin();it!=end;++it){
-        if (it==min) continue;
-        if (*it==0) continue;
-        *it%=*min;
-        ++num;
-      }
-      if (num==0) return *min;
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,tuple<T,T>>::type
+  constexpr extended_euclidean(const T a, const T b)
+  {
+    T r0 = a;
+    T r1 = b;
+    T s0 = 1;
+    T s1 = 0;
+    T t0 = 0;
+    T t1 = 1;
+    size_t n = 0;
+    while (r1) {
+      T q = r0 / r1;
+      r0 = r0>q*r1?r0-q*r1:q*r1-r0; swap(r0,r1);
+      s0 = s0+q*s1; swap(s0,s1);
+      t0 = t0+q*t1; swap(t0,t1);
+      ++n;
     }
-    return 0;
+    // Bézout coefficients = (old_s,old_t)
+    // gcd = old_r
+    if (n%2) s0=b-s0;
+    else     t0=a-t0;
+    return tuple<T,T>({s0,t0});
+  }
+
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,T>::type
+  modular_inverse(const T& n, const T& m) {
+    if (popcount(m)<=1) return modular_inverse_power2(n,m);
+    return get<0>(extended_euclidean(n,m));
   }
 
   // is faster when a<b ...
+  // this works for negative integers, nice
   template <typename T>
-  typename std::enable_if<std::is_unsigned<T>::value,T>::type
-  constexpr gcd(const T& a,const T&b){
+  typename std::enable_if<std::is_integral<T>::value,T>::type
+  //constexpr
+  gcd(const T& a,const T&b){
     return a?gcd(b%a,a):b;
   }
 
   template <class It>
   typename iterator_traits<It>::value_type
-  const gcd(It begin, It end){
-    size_t num;
-    while (true){
-      num=0;
-      end=remove_if(begin,end,
-          [](const typename iterator_traits<It>::value_type& x){return x==0;});
-      auto min=min_element(begin,end);
-      for (auto it=begin;it!=end;++it){
-        if (it==min) continue;
-        *it%=*min;
-        ++num;
-      }
-      if (num==0) return *min;
-    }
+  const gcd(const It begin,const It end){
+    auto min = min_element(
+        begin,end,
+        [](const auto& a,const auto& b)
+        {return a&&(abs(a)<abs(b));}
+        );
+    if (min==end) return 0;
+    auto t = *min;
+    for (auto it=begin;it!=end;++it) t = gcd(t,*it);
+    return t;
   }
 
   template <typename T>
   typename std::enable_if<std::is_integral<T>::value,T>::type
   constexpr lcm(const T& a, const T& b){
-    return a/gcd(a,b)*b;
-  }
-
-  // TODO least common multiple, may not be needed for NTT
-  template <class It>
-  typename iterator_traits<It>::value_type
-  constexpr inline lcm(It begin,
-                       It end){
-    return accumulate(begin,end,
-                      typename iterator_traits<It>::value_type(1),
-                      lcm<typename iterator_traits<It>::value_type>);
+    return (a&&b)?(a/gcd(a,b)*b):0;
   }
 
   template<typename T>
@@ -353,7 +314,7 @@ namespace wmath{
     return r;
   }
   
-/* power of x to e modulo m via exponentiation by squaring
+/* power of x to e via exponentiation by squaring
  */ 
   template<typename T>
   typename std::enable_if<std::is_integral<T>::value,T>::type
@@ -368,22 +329,25 @@ namespace wmath{
   }
 
 /* power of x to e modulo m via exponentiation by squaring
- */ 
+ */
   template<typename T>
   typename std::enable_if<std::is_integral<T>::value,T>::type
-  power_mod(T x,T e,const T& m){
+  pow_mod(T x,T e,const T& m){
     T result(1);
+    tuple<T,T> lm{m,0};
+    const auto i = fixpoint_integer_inverse(lm);
     while (e){
-      if (e&1ull) result=(x*result)%m;
-      x=(x*x)%m;
+      if (e&1ull) result = mul_mod(x,result,m,i);
+      x=mul_mod(x,x,m,i);
       e>>=1;
     }
     return result;
   }
   
+  /*
   template<typename T>
   typename std::enable_if<std::is_integral<T>::value,T>::type
-  power_mod_inplace(T& x,T& e,const T& m){
+  power_mod_inplace(T& x,T& e,const T& m) {
     T result(1);
     while (e){
       if (e&1ull) result=(x*result)%m;
@@ -392,6 +356,7 @@ namespace wmath{
     }
     return result;
   }
+  */
 
 /* floor of square root of n
  */
@@ -447,13 +412,12 @@ namespace wmath{
     return linear_congruential_engine<T,a,c,m>;
   }
   */
-  
 
 /* numerically stable and incremental mean and variance
- * start with T sumw=0.0, mean=0.0, M2=0.0;
- * or with T sumw=w_1, mean=x_1, M2=0;
+ * start with T sumw=0.0, mean=0.0, var=0.0;
+ * or with T sumw=w_1, mean=x_1, var=0;
  * and then call
- * mean_variance(x,w,sumw,mean,M2)
+ * mean_variance(x,w,sumw,mean,var)
  * for each pair of x and w */  
   template<typename T>
   typename enable_if<is_floating_point<T>::value>::type
@@ -462,22 +426,40 @@ namespace wmath{
       const T &w,
       T &sumw,
       T &mean,
-      T &M2
+      T &var
       ){
-    if (w<numeric_limits<T>::min()) return;
-    const T temp = w+sumw;
+    sumw += w;
     const T delta = x-mean;
-    const T R = delta*w/temp;
-    mean += R;
-    M2   += sumw*delta*R; // sumw*(x-mean)*(x-mean)*w/(sumw+w)
-    sumw  = temp;
+    mean += delta*w/sumw;
+    var  += ((x-mean)*delta-var)*w/sumw;
+  }
+  
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value>::type
+  const inline mean_variance_undo(
+      const T &x,
+      const T &w,
+      T &sumw,
+      T &mean,
+      T &var
+      ){
+    sumw -= w;
+    const T delta = x-mean;
+    if (abs(sumw)<numeric_limits<double>::min()) {
+      mean  = 0;
+      var   = 0;
+    } else {
+      mean -= delta*w/sumw;
+      var  -= ((x-mean)*delta-var)*w/sumw;
+    }
+    var = var<0?0:var;
   }
 
 /* numerically stable and incremental mean and variance
- * start with T sumw=0.0, mean=0.0, M2=0.0;
- * or with T sumw=w_1, mean=x_1, M2=0;
+ * start with T sumw=0.0, mean=0.0, var=0.0;
+ * or with T sumw=w_1, mean=x_1, var=0;
  * and then call
- * mean_variance(x,w,sumw,mean,M2)
+ * mean_variance(x,w,sumw,mean,var)
  * for each pair of x and w */  
   template<typename T>
   typename enable_if<is_floating_point<T>::value>::type
@@ -486,22 +468,22 @@ namespace wmath{
       const T &w,
       T &sumw,
       T &mean,
-      T &M2,
+      T &var,
       T &sumw2
       ){
     sumw2+=pow(w,2u);
-    mean_variance(x,w,sumw,mean,M2);
+    mean_variance(x,w,sumw,mean,var);
   }
 
   /* unbiased estimator for variance using reliability weigths
    */
   template<typename T>
   inline const T variance(
-      const T &M2,
+      const T &var,  // biased estimator
       const T &sumw,
       const T &sumw2
       ) {
-    return M2/(sumw-sumw2/sumw);
+    return var*sumw/(sumw-sumw2/sumw);
   }
 
 /* numerically stable and incremental mean
@@ -518,10 +500,8 @@ namespace wmath{
       T &sumw,
       T &mean
       ) {
-    T M2 = 0; // mean_variance does not depend on previous values of M2
-    mean_variance(x,w,sumw,mean,M2);
-    //mean += (x-mean)*w/(sumw+w);
-    //sumw += w;
+    T var = 0; // mean_variance does not depend on previous values of var
+    mean_variance(x,w,sumw,mean,var);
   }
   
   template<typename T>
@@ -531,7 +511,7 @@ namespace wmath{
       const T &w,
       const T &sumw,
       const T &mean,
-      const T &M2
+      const T &var
       ){
     return 0;
   }
@@ -543,7 +523,7 @@ namespace wmath{
       const T &w,
       const T &sumw,
       const T &mean,
-      const T &M2
+      const T &var
       ){
     return 1;
   }
@@ -555,7 +535,7 @@ namespace wmath{
       const T &w,
       const T &sumw,
       const T &mean,
-      const T &M2
+      const T &var
       ){
     return w/sumw;
   }
@@ -567,49 +547,53 @@ namespace wmath{
       const T &w,
       const T &sumw,
       const T &mean,
-      const T &M2
+      const T &var
       ){
     return (x-mean)/sumw;
   }
 
+  // TODO: this is wrong now
   template<typename T>
   typename enable_if<is_floating_point<T>::value,T>::type
-  const inline mean_variance_M2_dx_ini( // initial
+  const inline mean_variance_var_dx_ini( // initial
       const T &x,
       const T &w,
       const T &sumw,
       const T &mean,
-      const T &M2
+      const T &var
       ){
     return 2*w*(1-w/sumw)*(x-mean);
   }
   
+  // TODO: this is wrong now
   template<typename T>
   typename enable_if<is_floating_point<T>::value,T>::type
-  const inline mean_variance_M2_dx_acc( // needs to be accumulated
+  const inline mean_variance_var_dx_acc( // needs to be accumulated
       const T &x,
       const T &w,
       const T &w0,
       const T &sumw,
       const T &mean,
-      const T &M2
+      const T &var
       ){
     return -2*w0*w*(x-mean)/sumw;
   }
 
+  // TODO: this is wrong now
   template<typename T>
   typename enable_if<is_floating_point<T>::value,T>::type
-  const inline mean_variance_M2_dw_ini(
+  const inline mean_variance_var_dw_ini(
       const T &x,
       const T &w,
       const T &sumw,
       const T &mean,
-      const T &M2
+      const T &var
       ){
     return (x-mean)*(x-mean);
   }
 
 
+  // TODO: this is wrong now
 //       (x0-mean)^2
 // +2*w3*(mean-x0)*(x3-mean)/sumw
 // +2*w2*(mean-x0)*(x2-mean)/sumw
@@ -618,41 +602,39 @@ namespace wmath{
 // + ...
   template<typename T>
   typename enable_if<is_floating_point<T>::value,T>::type
-  const inline mean_variance_M2_dw_acc(
+  const inline mean_variance_var_dw_acc(
       const T &x,
       const T &w,
       const T &x0,
       const T &sumw,
       const T &mean,
-      const T &M2
+      const T &var
       ){
     return 2*w/sumw*(mean-x0)*(x-mean);
   }
-
 
 /* non corrected sample variance, correction factor is n*(n-1) 
  * to be used in conjunction with mean_variance */
   template<typename T>
   inline const T sample_variance(
-      const T& M2,
+      const T& var,
       const T& sumw
       ){
-    return M2/sumw;
+    return var;
   }
-
 
   template<typename T>
   struct mean_variance_calculator{
-    T M2=0;
+    T var =0;
     T sumw=0;
     size_t n=0;
     T mean=0;
     void push(const T& x, const T& w){
       ++n;
-      mean_variance(x,w,sumw,mean,M2);
+      mean_variance(x,w,sumw,mean,var);
     } 
     T variance() const {
-      return wmath::variance(M2,sumw,n);
+      return wmath::variance(var,sumw,n);
     }
   };
 
@@ -672,6 +654,54 @@ namespace wmath{
     }
     mv[1]/=sumw*(distance(beg,end)-1);
     return mv;
+  }
+ 
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value>::type
+  const inline mean_covariance(
+      const T &x,
+      const T &y,
+      const T &w,
+      T &sw,
+      T &mx,
+      T &my,
+      T &vx,
+      T &vy,
+      T &cv
+      ){
+    if (w<numeric_limits<T>::min()) return;
+    sw+=w;
+    const T dx = x-mx;
+    const T dy = y-my;
+    mx += dx*w/sw;
+    vx += (dx*(x-mx)-vx)*w/sw;
+    my += dy*w/sw;
+    vy += (dy*(y-my)-vy)*w/sw;
+    cv += (w*dx*(y-my)-cv)*w/sw;
+  }
+  
+  template<typename T>
+  typename enable_if<is_floating_point<T>::value>::type
+  const inline mean_covariance_undo(
+      const T &x,
+      const T &y,
+      const T &w,
+      T &sw,
+      T &mx,
+      T &my,
+      T &vx,
+      T &vy,
+      T &cv
+      ){
+    if (w<numeric_limits<T>::min()) return;
+    sw-=w;
+    const T dx = x-mx;
+    const T dy = y-my;
+    mx -= dx*w/sw;
+    vx -= (dx*(x-mx)-vx)*w/sw;
+    my -= dy*w/sw;
+    vy -= (dy*(y-my)-vy)*w/sw;
+    cv -= (w*dx*(y-my)-cv)*w/sw;
   }
 
 /*
@@ -756,25 +786,28 @@ namespace wmath{
   template<typename T>
   class cc_fisher{
     public:
-      size_t n=0;
-      T var_x=0;
-      T var_y=0;
-      T covar=0;
-      cc_fisher& push(const T& x, const T&y){
-        ++n;
-        // TODO: numerically stable version a la mean_variance
-        // -> calculate mean variance instead of Sum of squares
-        var_x+=x*x;
-        var_y+=y*y;
-        covar+=x*y;
+      size_t n = 0;
+      T sumw   = 0;
+      T var_x  = 0;
+      T var_y  = 0;
+      T covar  = 0;
+      cc_fisher& push(const T& x, const T& y, const T& w=T(1)){
+        // use this approximation: w = 1/(vx*vy + vx*y + vy*x)
+        var_x+=w*x*x;
+        var_y+=w*y*y;
+        covar+=w*x*y;
+        sumw +=w;
+        n    +=1;
       }
       T operator()(){
         return covar/sqrt(var_x*var_y);
       }
       inline void clear(){
-        var_x=0;
-        var_y=0;
-        covar=0;
+        var_x = 0;
+        var_y = 0;
+        covar = 0;
+        n     = 0;
+        sumw  = 0;
       }
   };
 
@@ -991,7 +1024,6 @@ namespace wmath{
     return tuple<uint64_t,uint64_t>{morton_1(c),morton_1(c<<1)};
   }
 
-
   template<typename T>
   typename std::enable_if<std::is_integral<T>::value,T>::type
   constexpr factorial(const T n){
@@ -1106,8 +1138,336 @@ namespace wmath{
     const size_t i = n-(j*(j-1))/2;
     return {i,j};
   }
+  
+  template<class iterator>
+  auto const destructive_median(
+      iterator begin,
+      iterator end
+      )
+  {
+    nth_element(begin,begin+(end-begin  )/2,end);
+    nth_element(begin,begin+(end-begin+1)/2,end);
+    const auto median = (*(begin+(end-begin  )/2)
+                        +*(begin+(end-begin+1)/2))/2;
+    return median;
+  }
+  
+  template<class iterator>
+  auto const destructive_median_mad(
+      iterator begin,
+      iterator end
+      )
+  {
+    nth_element(begin,begin+(end-begin  )/2,end);
+    nth_element(begin,begin+(end-begin+1)/2,end);
+    const auto median = (*(begin+(end-begin  )/2)
+                        +*(begin+(end-begin+1)/2))/2;
+    transform(begin,end,begin,[&median](const auto v){return abs(v-median);});
+    nth_element(begin,begin+(end-begin  )/2,end);
+    nth_element(begin,begin+(end-begin+1)/2,end);
+    const auto mad    = (*(begin+(end-begin  )/2)
+                        +*(begin+(end-begin+1)/2))/2;
+    return make_tuple(median,mad);
+  }
 
-  // TODO long division
+  template<class iterator>
+  auto const destructive_weighted_median_variance(
+      iterator begin,
+      iterator end
+      )
+  {
+    auto median = get<0>(*begin); median = 0;
+    if (begin==end) {
+      return make_tuple(median,0.0);
+    }
+    sort(begin,end);
+    auto lower_sum = get<1>(*begin);lower_sum = 0;
+    auto upper_sum = get<1>(*begin);upper_sum = 0;
+    auto sumw2     = get<1>(*begin);sumw2 = 0;
+    auto it0 = begin;
+    auto it1 = end-1;
+    while (it0!=it1) {
+      if (lower_sum<upper_sum) {
+        lower_sum += get<1>(*it0);
+        sumw2 += pow(get<1>(*it0),2);
+        ++it0;
+        continue;
+      }
+      if (upper_sum<lower_sum) {
+        upper_sum += get<1>(*it1);
+        sumw2 += pow(get<1>(*it1),2);
+        --it1;
+        continue;
+      }
+      lower_sum += get<1>(*it0);
+      ++it0;
+    }
+    if (upper_sum<lower_sum) {
+      median = get<0>(*it0);
+    } else {
+      if (lower_sum<upper_sum) {
+        median = get<0>(*it1);
+      } else {
+        median = (get<0>(*it0)+get<1>(*it1))/2;
+      }
+    }
+    const auto sumw = lower_sum+upper_sum;
+    const double is2 = 4.0*pow(sumw,2)/sumw2;
+    double variance = 0;
+    double normalization = 0;
+    for (it0=begin;it0!=end;++it0) {
+      const double w = exp(-0.5*pow(lower_sum/sumw-0.5,2)*is2)
+                      *get<1>(*it0);
+                      //*pow(get<1>(*it0),3);
+      variance += w*pow(get<0>(*it0)-median,2);
+      normalization+=w;
+    }
+    variance/=normalization;
+    return make_tuple(median,variance);
+  }
+
+  // copied from c++ reference to test
+  template<class ForwardIt, class UnaryPredicate>
+  ForwardIt _partition(ForwardIt first, ForwardIt last, UnaryPredicate p)
+  {
+    first = std::find_if_not(first, last, p);
+    if (first == last) return first;
+    for (auto i = std::next(first); i != last; ++i)
+    {
+      if (p(*i))
+      {
+        //std::iter_swap(*i, first);
+        swap(*i,*first);
+        ++first;
+      }
+    }
+    return first;
+  }
+  
+  // Dijkstra's three way partitioning
+  template<class iterator,class threewaycomparator>
+  tuple<iterator,iterator> three_way_partition(
+      iterator begin,
+      iterator end,
+      threewaycomparator comp
+      ) {
+    auto next = begin;
+    while (next!=end) {
+      if (comp(*next)<0) {
+        std::iter_swap(begin++,next++);
+        continue;
+      }
+      if (comp(*next)>0) {
+        std::iter_swap(next,--end);
+      } else {
+        ++next;
+      }
+    }
+    return {begin,next};
+  }
+  
+  template<class iterator,typename T,bool lower>
+  auto lower_upper_weighted_quartile_element(
+      iterator begin,
+      T quartile,
+      iterator end
+      )
+  {
+    auto sum = T(0);
+    const auto _begin = begin;
+    while (begin!=end) {
+      auto pivot = get<0>(*(begin+(end-begin)/2));
+      auto [middle0,middle1] =
+          three_way_partition(begin,end,
+              [pivot](const auto& v){
+              return (pivot<get<0>(v))-(get<0>(v)<pivot);
+              });
+      T lower_sum = 0;
+      for (auto it=begin;it!=middle0;++it) {
+        lower_sum+=get<1>(*it);
+        if constexpr (lower) {
+          if ((sum+lower_sum)>=quartile) {
+            end=middle0;
+            break;
+          }
+        } else {
+          if ((sum+lower_sum)> quartile) {
+            end=middle0;
+            break;
+          }
+        }
+      }
+      if constexpr (lower) {
+        if ((sum+lower_sum)>=quartile) continue;
+      } else {
+        if ((sum+lower_sum)> quartile) continue;
+      }
+      sum+=lower_sum;
+      begin = middle0;
+      for (auto it=begin;it!=middle1;++it) {
+        sum+=get<1>(*it);
+        if constexpr (lower) {
+          if (sum>=quartile) return it;
+        } else {
+          if (sum> quartile) return it;
+        }
+      }
+      if (middle1==end) return begin;
+      begin = middle1;
+    }
+    return begin;
+  }
+  
+  template<class iterator,typename T>
+  auto lower_weighted_quartile_element(
+      iterator begin,
+      T quartile,
+      iterator end
+      )
+  {
+    return lower_upper_weighted_quartile_element<iterator,T,true>(
+        begin,quartile,end);
+  } 
+  
+  template<class iterator,typename T>
+  auto upper_weighted_quartile_element(
+      iterator begin,
+      T quartile,
+      iterator end
+      )
+  {
+    return lower_upper_weighted_quartile_element<iterator,T,false>(
+        begin,quartile,end);
+  } 
+  
+  template<class iterator,typename T>
+  auto weighted_quartile_value(
+      iterator begin,
+      T q,
+      iterator end
+      )
+  {
+    if (begin==end) {
+      typename remove_reference<decltype(get<0>(*begin))>::type d = 0;
+      return d;
+    }
+    auto element_hi = upper_weighted_quartile_element(begin,q,end);
+    auto upper_value = get<0>(*element_hi);
+    auto element_lo = lower_weighted_quartile_element(begin,q,element_hi+1);
+    auto lower_value = get<0>(*element_lo);
+    return lower_value+(upper_value-lower_value)/2;
+  }
+  
+  template<class iterator,typename T>
+  auto const primitive_weighted_quartile_value(
+      iterator begin,
+      T q,
+      iterator end
+      )
+  {
+    sort(begin,end,
+        [](const auto& a,const auto &b){return get<0>(a)<get<0>(b);});
+    T sum = 0;
+    auto it = begin;
+    for (;it!=end;++it) {
+      sum+=get<1>(*it);
+      if (sum>q) return get<0>(*it);
+      if (sum<q) continue;
+      const auto lower_value = get<0>(*it);
+      for (++it;it!=end;++it) {
+        sum+=get<1>(*it);
+        if (sum>q) {
+          const auto upper_value = get<0>(*it);
+          return lower_value+(upper_value-lower_value)/2;
+        }
+      }
+      return lower_value;
+    }
+    if (begin==end) {
+      typename remove_reference<decltype(get<0>(*begin))>::type d = 0;
+      return d;
+    } else {
+      --it;
+      return get<0>(*it);
+    }
+  }
+  
+  template<class iterator,typename T>
+  auto const primitive_lower_weighted_quartile_element(
+      iterator begin,
+      T q,
+      iterator end
+      )
+  {
+    if (begin==end) return begin;
+    sort(begin,end,
+        [](const auto& a,const auto &b){return get<0>(a)<get<0>(b);});
+    T sum = 0;
+    auto it = begin;
+    for (;it!=end;++it) {
+      sum+=get<1>(*it);
+      if (sum>=q) return it;
+    }
+    return --it;
+  }
+  
+  template<class iterator,typename T>
+  auto const primitive_upper_weighted_quartile_element(
+      iterator begin,
+      T q,
+      iterator end
+      )
+  {
+    if (begin==end) return begin;
+    sort(begin,end,
+        [](const auto& a,const auto &b){return get<0>(a)<get<0>(b);});
+    T sum = 0;
+    auto it = begin;
+    for (;it!=end;++it) {
+      sum+=get<1>(*it);
+      if (sum>q) return it;
+    }
+    return --it;
+  }
+
+  /* TODO
+  template<typename T>
+  typename std::enable_if<std::is_unsigned<T>::value,
+           tuple<tuple<T,T>,tuple<T,T>>>::type
+  long_division(
+      const tuple<T,T>& n,
+      const tuple<T,T>& d,
+      )
+  {
+    tuple<T,T> x{0,0};
+    auto d1=d;
+    auto tmp=get<1>(d1);
+    --get<1>(d1);
+    get<0>(d1)-=get<1>(d1)>tmp;
+    if (get<0>(d1)) {
+      get<1>(x)=T(1)<<clz(get<0>(d1));
+    } else {
+      get<0>(x)=T(1)<<clz(get<1>(d1));
+    }
+    for (size_t j=0;j!=log2(digits<T>())*2;++j) {
+      auto x1=x;
+      auto tmp=get<1>(x1);
+      ++get<1>(x1);
+      get<0>(x1)+=get<1>(d1)<tmp;
+      auto xd=long_mul(x,d);
+      get<0>(x)=~get<0>(xd);
+      get<1>(x)=~get<1>(xd);
+      tmp = get<1>(xd);
+      --get<1>(xd);
+      get<1>(xd)-=get<1>(xd)>tmp;
+      x += super_long_mul(x1,xd);
+    }
+    tuple<T,T> q = get<0>(super_long_mul(n,xd));
+    if (n-long_mul(q,d)>=d) ++q;
+    tuple<T,T> r = n-long_mul(q,d);
+    return {q,r};
+  }
+  */
 }
 
 #endif // WMATH_MATH_H
