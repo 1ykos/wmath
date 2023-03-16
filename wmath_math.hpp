@@ -7,6 +7,10 @@ namespace wmath{
   template <typename T> int signum(T val) {
     return (T(0) < val) - (val < T(0));
   }
+  
+  template <typename T> auto abs_difference(const T a,const T b) {
+    return a<b?b-a:a-b;
+  }
 
   template <typename T0,typename T1>
   typename std::enable_if<
@@ -1170,74 +1174,17 @@ namespace wmath{
     return make_tuple(median,mad);
   }
 
-  template<class iterator>
-  auto const destructive_weighted_median_variance(
-      iterator begin,
-      iterator end
-      )
-  {
-    auto median = get<0>(*begin); median = 0;
-    if (begin==end) {
-      return make_tuple(median,0.0);
-    }
-    sort(begin,end);
-    auto lower_sum = get<1>(*begin);lower_sum = 0;
-    auto upper_sum = get<1>(*begin);upper_sum = 0;
-    auto sumw2     = get<1>(*begin);sumw2 = 0;
-    auto it0 = begin;
-    auto it1 = end-1;
-    while (it0!=it1) {
-      if (lower_sum<upper_sum) {
-        lower_sum += get<1>(*it0);
-        sumw2 += pow(get<1>(*it0),2);
-        ++it0;
-        continue;
-      }
-      if (upper_sum<lower_sum) {
-        upper_sum += get<1>(*it1);
-        sumw2 += pow(get<1>(*it1),2);
-        --it1;
-        continue;
-      }
-      lower_sum += get<1>(*it0);
-      ++it0;
-    }
-    if (upper_sum<lower_sum) {
-      median = get<0>(*it0);
-    } else {
-      if (lower_sum<upper_sum) {
-        median = get<0>(*it1);
-      } else {
-        median = (get<0>(*it0)+get<1>(*it1))/2;
-      }
-    }
-    const auto sumw = lower_sum+upper_sum;
-    const double is2 = 4.0*pow(sumw,2)/sumw2;
-    double variance = 0;
-    double normalization = 0;
-    for (it0=begin;it0!=end;++it0) {
-      const double w = exp(-0.5*pow(lower_sum/sumw-0.5,2)*is2)
-                      *get<1>(*it0);
-                      //*pow(get<1>(*it0),3);
-      variance += w*pow(get<0>(*it0)-median,2);
-      normalization+=w;
-    }
-    variance/=normalization;
-    return make_tuple(median,variance);
-  }
-
   // copied from c++ reference to test
   template<class ForwardIt, class UnaryPredicate>
   ForwardIt _partition(ForwardIt first, ForwardIt last, UnaryPredicate p)
   {
     first = std::find_if_not(first, last, p);
     if (first == last) return first;
-    for (auto i = std::next(first); i != last; ++i)
+    for (auto i=std::next(first);i!=last;++i)
     {
       if (p(*i))
       {
-        //std::iter_swap(*i, first);
-        swap(*i,*first);
+        std::iter_swap(i, first);
         ++first;
       }
     }
@@ -1356,6 +1303,55 @@ namespace wmath{
     auto element_lo = lower_weighted_quartile_element(begin,q,element_hi+1);
     auto lower_value = get<0>(*element_lo);
     return lower_value+(upper_value-lower_value)/2;
+  }
+  
+  template<class iterator>
+  auto const destructive_weighted_median_variance(
+      iterator begin,
+      iterator end
+      )
+  {
+    typename remove_reference<decltype(get<1>(*begin))>::type sumw  = 0;
+    typename remove_reference<decltype(get<1>(*begin))>::type sumw2 = 0;
+    for (auto it=begin;it!=end;++it) {
+      sumw  +=     get<1>(*it);
+      sumw2 += pow(get<1>(*it),2);
+    }
+    if ((begin==end)||(sumw2==0)||(sumw==0)) {
+      typename remove_reference<decltype(get<0>(*begin))>::type median = 0;
+      return make_tuple(median,0.0);
+    }
+    const auto upper_median_element=upper_weighted_quartile_element(
+        begin,
+        sumw/2,
+        end);
+    const auto upper_median=get<0>(*upper_median_element);
+    const auto lower_median_element=lower_weighted_quartile_element(
+        begin,
+        sumw/2,
+        upper_median_element+1);
+    const auto lower_median=get<0>(*lower_median_element);
+    const auto median = lower_median+(lower_median-lower_median)/2;
+    const auto s = 0.5*sqrt(sumw2);
+    const auto lower_sigma=lower_weighted_quartile_element(begin,sumw/2-3*s,end);
+    const auto upper_sigma=lower_weighted_quartile_element(begin,sumw/2+3*s,end);
+    sort(lower_sigma,upper_sigma,
+        [](const auto& a,const auto &b){return get<0>(a)<get<0>(b);});
+    const auto is2 = pow(s,-2);
+    double variance = 0;
+    double normalization = 0;
+    const auto mx = sumw/2;
+    typename remove_reference<decltype(get<1>(*begin))>::type x = 0;
+    for (auto it=begin;it!=lower_sigma;++it) x+=get<1>(*it);
+    for (auto it=lower_sigma;it!=upper_sigma+1;++it) {
+      const auto d = abs_difference(x+get<1>(*it)/2,mx);
+      const auto w = exp(-0.5*pow(d,2)*is2)*get<1>(*it);
+      variance += w*pow(get<0>(*it)-median,2);
+      normalization+=w;
+      x+=get<1>(*it);
+    }
+    if (normalization>0) variance/=normalization;
+    return make_tuple(median,variance);
   }
   
   template<class iterator,typename T>
