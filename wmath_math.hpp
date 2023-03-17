@@ -1333,8 +1333,10 @@ namespace wmath{
     const auto lower_median=get<0>(*lower_median_element);
     const auto median = lower_median+(lower_median-lower_median)/2;
     const auto s = 0.5*sqrt(sumw2);
-    const auto lower_sigma=lower_weighted_quartile_element(begin,sumw/2-3*s,end);
-    const auto upper_sigma=lower_weighted_quartile_element(begin,sumw/2+3*s,end);
+    auto lower_sigma=lower_weighted_quartile_element(begin,sumw/2-3*s,end);
+    if (lower_sigma!=begin) --lower_sigma;
+    auto upper_sigma=lower_weighted_quartile_element(begin,sumw/2+3*s,end);
+    if (upper_sigma+1!=end) ++upper_sigma;
     sort(lower_sigma,upper_sigma,
         [](const auto& a,const auto &b){return get<0>(a)<get<0>(b);});
     const auto is2 = pow(s,-2);
